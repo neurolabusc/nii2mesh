@@ -23,3 +23,14 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+The PolygoniseCube function comes from Cory Bloyd's public domain Marching Cubes Example Program described here http://paulbourke.net/geometry/polygonise/
+
+The bwlabel.cpp file was written by Jesper Andersson, who has explicitly allowed this to be shared using the BSD 2-Clause license (above).
+
+base64.cpp was written by Jouni Malinen and is distributed under the BSD license. For a performance evaluation, see https://github.com/gaspardpetit/base64
+
+simplify.h was written by Sven Forstmann and distributed under the MIT license. https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification
+
+The software can be optionally compiled to use the radixsort files written by Cameron Hart (2014) using the zlib license. https://github.com/bitshifter/radixsort
+
