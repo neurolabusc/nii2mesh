@@ -5,6 +5,8 @@
 //extern "C" {
 #endif
 
+#include <stdbool.h>
+
 int bwlabel(float *img, int conn, size_t dim[3], bool onlyLargest, bool fillBubbles);
 //if 
 // onlyLargest = 0: return image where voxel intensity is cluster number

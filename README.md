@@ -19,12 +19,12 @@ You can also compile the program using Windows, but you may find it easier to do
 Here are the instructions for using this tool (you can also run the executable without any arguments to see this help):
 
 ```
-Converts a NIfTI voxelwise image to triangulated mesh.
-Usage: ./nii2mesh [options] niftiname meshname
+Converts a NIfTI voxelwise volume to triangulated mesh.
+Usage: ./nii2mesh inputNIfTI [options] outputMesh
 Options
     -a s    atlas text file (e.g. '-a D99_v2.0_labels_semicolon.txt')
     -b v    bubble fill (0=bubbles included, 1=bubbles filled, default 0)
-    -i v    isosurface intensity (default mid-range)
+    -i v    isosurface intensity (d=dark, m=mid, b=bright, number for custom, default medium)
     -l v    only keep largest cluster (0=all, 1=largest, default 1)
     -p v    pre-smoothing (0=skip, 1=smooth, default 1)
     -r v    reduction factor (default 0.25)
@@ -32,11 +32,12 @@ Options
     -s v    post-smoothing iterations (default 0)
     -v v    verbose (0=silent, 1=verbose, default 0)
 mesh extension sets format (.gii, .mz3, .obj, .ply, .pial, .stl, .vtk)
-Example: './nii2mesh myInput.nii myOutput.obj'
-Example: './nii2mesh -i 22 myInput.nii myOutput.obj'
-Example: './nii2mesh -p 0 img.nii out.ply'
-Example: './nii2mesh -v 1 img.nii out.ply'
-Example: './nii2mesh -r 0.1 img.nii small.gii'
+Example: './nii2mesh voxels.nii mesh.obj'
+Example: './nii2mesh bet.nii.gz -i 22 myOutput.obj'
+Example: './nii2mesh bet.nii.gz -i b bright.obj'
+Example: './nii2mesh img.nii -v 1 out.ply'
+Example: './nii2mesh img.nii -p 0 -r 1 large.ply'
+Example: './nii2mesh img.nii -r 0.1 small.gii'
 ```
 ## Processing Steps
 
@@ -51,8 +52,8 @@ In the images below, we will view the resulting meshes using [Surfice](https://w
 1. You can choose to pre-smooth your data (`-p 1`) or not (`-p 0`) prior to making a mesh. This emulates a Gaussian blur with a narrow kernel, which tends to attenuate noise in the image. 
 
 ```
-nii2mesh -p 0 bet.nii.gz p0.ply
-nii2mesh -p 1 bet.nii.gz p1.ply
+nii2mesh bet.nii.gz -p 0  p0.ply
+nii2mesh bet.nii.gz -p 1 p1.ply
 ```
 
 ![Influence of p 0 vs p 1](p01.jpg)
@@ -60,8 +61,8 @@ nii2mesh -p 1 bet.nii.gz p1.ply
 2. You can choose to only retain the largest connected object (`-l 1`) or keep all objects (`-l 0`). The image below shows that the balls and other small blobs do not appear when `-l 1` is selected.
 
 ```
-nii2mesh -l 0 bet.nii.gz l0.ply
-nii2mesh -l 1 bet.nii.gz l1.ply
+nii2mesh bet.nii.gz -l 0 l0.ply
+nii2mesh bet.nii.gz -l 1 l1.ply
 ```
 
 ![Influence of l 0 vs l 1](l01.jpg)
@@ -69,38 +70,40 @@ nii2mesh -l 1 bet.nii.gz l1.ply
 3. You can choose to fill bubbles (`-b 1`) or retain bubbles (`-b 0`). Filling holes will create solid objects if you print them. If you look at the cut-away views below you will notice that this option determines whether the ventricles inside the brain and the interior sphere exist in the mesh file.
 
 ```
-nii2mesh -l 0 -b 1 bet.nii.gz b1.ply
-nii2mesh -l 0 -b 0 bet.nii.gz b0.ply
+nii2mesh bet.nii.gz -i 122 -l 0 -b 0 b0.ply
+nii2mesh bet.nii.gz -i 122 -l 0 -b 1 b1.ply
 ```
 
 ![Influence of b 0 vs b 1](b01.jpg)
 
-4. You can choose an isosurface value. This is the voxel brightness used to distinguish air from tissue. If you click on the voxel data with MRIcroGL, you will note that the brightness of the selected voxel location is shown in the title bar, allowing you to estimate a good boundary. The image below shows the difference between `-i 88` and `-i 128` for our example image. If you do not specify a value, the program will default to the middle intensity between the brightest and darkest value.
+4. You can choose an isosurface value. This is the voxel brightness used to distinguish air from tissue. If you click on the voxel data with MRIcroGL, you will note that the brightness of the selected voxel location is shown in the title bar, allowing you to estimate a good boundary. The options `-i d`, `-i m`, `-i b` choose dark, medium and bright values based on [multi-Otsu thresholding](https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_multiotsu.html). You can also specify an explicit numeric value, for example `-i 128`. If you do not specify a value, the program will default to the medium intensity.
 
 ```
-nii2mesh -i 88 bet.nii.gz i88.ply
-nii2mesh -i 128 bet.nii.gz i128.ply
+nii2mesh bet.nii.gz -i d d.ply
+nii2mesh bet.nii.gz -i m m.ply
+nii2mesh bet.nii.gz -i b b.ply
+nii2mesh bet.nii.gz -i 122 122.ply
 ```
 
-![Influence of i 88 vs i 128](i88i128.jpg)
+![Influence of isosurface adjustment](iso.jpg)
 
 5. The `-s` option allows you to specify the number of iterations for the [smoothing of your mesh](https://doi.org/10.1111/1467-8659.00334). Unlike the `p`re-smooth, the `s`mooth is applied after the voxels are converted into a triangular mesh. This effect is much more subtle than the pre-smooth. This option is best suited for low resolution, block images. It is worth noting that the reduction factor also will tend to smooth images, attenuating small variations. Therefore, to illustrate the effect we are turning off both the pre-smoothing and the mesh reduction.
 
 ```
-nii2mesh -r 1 -p 0 -s 100 bet.nii.gz s100.ply
-nii2mesh -r 1 -p 0 -s 0 bet.nii.gz s0.ply
+nii2mesh bet.nii.gz -i 120 -r 1 -p 0 -s 0 s0.ply
+nii2mesh bet.nii.gz -i 120 -r 1 -p 0 -s 100 s100.ply
 ```
 
-![Influence of s 0 vs s 100](s0s100.jpg)
+![Influence of smoothing](s0s100.jpg)
 
 6. The reduction factor allows you to simplify the mesh, resulting in a much smaller file size and faster renderng on slow hardware. This stage uses [Sven Forstmann's](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) simplification method which is [adaptive](http://www.alecjacobson.com/weblog/?p=4444), using smaller triangles in regions of curvature and large triangles in flat regions. Choosing a value of `-r 0.15` will eliminate 85% of the triangles. Notice how similar the top row appears, while the bottom row illustrates a dramatic reduction in complexity.
 
 ```
-nii2mesh -r 1 bet.nii.gz r100.ply
-nii2mesh -r 0.15 bet.nii.gz r15.ply 
+nii2mesh bet.nii.gz -r 0.5 r50.ply
+nii2mesh bet.nii.gz -r 0.15 r15.ply 
 ```
 
-![Influence of r 1.0 vs r 0.15](r100r15.jpg)
+![Influence of r 0.5 vs r 0.15](r50r15.jpg)
 
 ## Atlases
 
@@ -109,13 +112,13 @@ Atlases identify different discrete brain regions, such as [Brodmann Area](https
 The simplest usage would be:
 
 ```
-nii2mesh -a 1 D99_atlas_v2.0_right.nii.gz D99.gii
+nii2mesh D99_atlas_v2.0_right.nii.gz -a 1 D99.gii
 ```
 
 Note that the presmooth may slightly erode very small or thin regions. If this is undesirable, you could turn off the pre-smoothing and consider applying a small amount of smoothing after the mesh is created:
 
 ```
-nii2mesh -p 0 -s 10 -a 1 D99_atlas_v2.0_right.nii.gz D99s10roi.mz3
+nii2mesh D99_atlas_v2.0_right.nii.gz -p 0 -s 10 -a 1 D99s10roi.mz3
 ```
 
 Alternatively, you can provide the file name for a semicolon delimited text file. The format should have the index number in the first column, and the nickname in the second column. Consider the provided example file `D99_v2.0_labels_semicolon.txt`:
@@ -135,6 +138,19 @@ nii2mesh -a D99_v2.0_labels_semicolon.txt D99_atlas_v2.0_right.nii.gz D99_.gii
 
 with the resulting meshes have the file names `D99_pu.k1.gii`, `D99_cd.k2.gii`, etc.
 
+
+## Supported Mesh Formats
+
+nii2mesh can save meshes to the GIfTI (.gii), mz3, obj, ply, FreeSurfer (.pial), stl, vtk.  [MeshLab](https://www.meshlab.net) can export meshes to many other formats. Therefore, one option is to create a PLY mesh with nii2mesh and use MeshLab to export to your favorite format.
+
+ - [GIfTI](https://www.nitrc.org/projects/gifti/) is a popular Geometry format for Neuroimaging. The usage of base64 encoding leads to relatively large files and slow loading.
+ - [OBJ](http://www.paulbourke.net/dataformats/obj/) format is very popular, and may be a great choice for 3D printing. The use of ASCII rather than binary encoding makes these files large, slow to read and typically suggests limited precision.
+ - [PLY](http://paulbourke.net/dataformats/ply/) is an old format that is widely supported. The binary form created by nii2mesh yields small files and quick loading time.
+ - [MZ3](https://github.com/neurolabusc/surf-ice/tree/master/mz3) is the native format of [Surfice](https://www.nitrc.org/projects/surfice/). It is small and fast, but not widely supported.
+ - [FreeSurfer](https://surfer.nmr.mgh.harvard.edu) format is simple and used by FreeSurfer.
+ - [VTK](http://www.princeton.edu/~efeibush/viscourse/vtk.pdf) refers to the legacy VTK format, which is supported by many tools (unlike the more flexible modern XML-based VTK formats).
+ - [STL](http://www.paulbourke.net/dataformats/stl/) format is popular for 3D printing. You should use any other format unless required. This format does not re-use vertices across triangles, this results in very large files. Further, this means the meshes are either slow to load or appear to have a faceted jagged appearance.
+
 ## Printing
 
 You can use this tool to generate meshes suitable for 3D printing.
@@ -147,7 +163,7 @@ nii2mesh is a general mesh making method, which can be applied to any NIfTI imag
 
 For brain specific printing, you may want to look at these tutorials.
 
- - [nii_nii2stl](https://github.com/rordenlab/spmScripts/blob/master/nii_nii2stl.m) uses Matlab and SPM.
+ - [nii\_nii2stl](https://github.com/rordenlab/spmScripts/blob/master/nii_nii2stl.m) uses Matlab and SPM.
  - [Fei Gu](https://flashsherlock.github.io/2021/10/23/how-to-print-your-brain/) uses FreeSrufer, MeshLab and Meshmixer.
  - [Michael Notter](https://github.com/miykael/3dprintyourbrain) uses FreeSurfer and MeshLab.
  - This [Instructables](https://www.instructables.com/3D-print-your-own-brain/) tutorial uses FreeSurfer and MeshLab.
@@ -156,11 +172,13 @@ For brain specific printing, you may want to look at these tutorials.
 
 ## Links
 
- - Seminal marching cubes page by [Paul Bourke](http://paulbourke.net/geometry/polygonise/). Be aware that this code is not compatible with the `-Ofast` compiler mode (use `-O3` or `O2`).
- - This project includes a C port of [Sven Forstmann C++ fast mesh simplification](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) using [quadric error metrics](http://www.cs.cmu.edu/~./garland/Papers/quadric2.pdf). Note that the C code is able thread safe (you can simplify multiple meshes simultaneously).
+ - This project extends Cory Bloyd's marching cubes implementation described in [Paul Bourke's](http://paulbourke.net/geometry/polygonise/) seminal web page.
+ - This project includes a C port of [Sven Forstmann's C++ fast mesh simplification](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) using [quadric error metrics](http://www.cs.cmu.edu/~./garland/Papers/quadric2.pdf).
  - [Laplacian smooth with Humphrey’s Classes to preserve volume](https://doi.org/10.1111/1467-8659.00334), also as [PDF](http://informatikbuero.com/downloads/Improved_Laplacian_Smoothing_of_Noisy_Surface_Meshes.pdf).
- - AFNI [IsoSurface](https://afni.nimh.nih.gov/pub/dist/doc/program_help/IsoSurface.html) using an [efficient marching cubes implementation](https://www.researchgate.net/publication/228537283_Efficient_Implementation_of_Marching_Cubes%27_Cases_with_Topological_Guarantees).
+ - AFNI [IsoSurface](https://afni.nimh.nih.gov/pub/dist/doc/program_help/IsoSurface.html) using an [efficient marching cubes implementation](https://www.researchgate.net/publication/228537283_Efficient_Implementation_of_Marching_Cubes%27_Cases_with_Topological_Guarantees). Likewise, AFNI [SurfMesh](https://afni.nimh.nih.gov/pub/dist/doc/program_help/SurfMesh.html) provides a [similar mesh simplification algorithm](https://faculty.cc.gatech.edu/~turk/my_papers/memless_tvcg99.pdf).
  - [Alec Jacobson has a nice demonstration of adaptive mesh simplification versus decimation](http://www.alecjacobson.com/weblog/?p=4444).
  - [Alec Jacobson](https://github.com/alecjacobson/geometry-processing-smoothing) describes smoothing and provides example noisy meshes.
  - MRtrix3 includes [voxel2mesh](https://mrtrix.readthedocs.io/en/latest/reference/commands/voxel2mesh.html)
+ - [iso2mesh.sourceforge.net](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi) are a set of Matlab/Octave tools for mesh generation and refinement.
  - FSL [FIRST](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FIRST/UserGuide) automates tissue segmentation.
+ - [nii\_2\_mesh\_conversion.py](https://github.com/MahsaShk/MeshProcessing) is related to nii2mesh: it converts a binary NIfTI image to a mesh in STL format using VTK the package.

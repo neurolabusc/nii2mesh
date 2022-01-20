@@ -479,8 +479,6 @@ void quadric_simplify_mesh(vec3d **vs, vec3i **ts, int* nvert, int *ntri, int ta
 				calculate_error(i0,i1,&p, vertices);
 				if( flipped(p,i0,i1,*v0,*v1,deleted0, triangles, refs, vertices) ) continue;
 				if( flipped(p,i1,i0,*v1,*v0,deleted1, triangles, refs, vertices) ) continue;
-				int ndeleted0 = v0->tcount;
-				int ndeleted1 = v1->tcount;
 				// not flipped, so remove edge
 				v0->p=p;
 				symMatAdd(v0->q, v1->q, v0->q); //v0.q=v1.q+v0.q;

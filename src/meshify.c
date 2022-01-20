@@ -497,7 +497,7 @@ int unify_vertices(vec3d **inpt, vec3i *tris, int ntri, bool verbose) {
 		idx_in[i] = i;
 		old2new[i] = -1;//not yet set
 	}
-	uint32_t ret = radix11sort_f32(dx_in, dx_out, idx_in, idx_out, npt);
+	radix11sort_f32(dx_in, dx_out, idx_in, idx_out, npt);
 	free(dx_in);
 	free(idx_in);
 	int nnew = 0; //number of unique vertices
@@ -696,8 +696,7 @@ long timediff(double startTimeMsec, double endTimeMsec) {
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
-
-int meshify(float * img, nifti_1_header * hdr, float isolevel, vec3i **t, vec3d **p, int *nt, int *np, int preSmooth, bool onlyLargest, bool fillBubbles, bool verbose) {
+int meshify(float * img, size_t dim[3], float isolevel, vec3i **t, vec3d **p, int *nt, int *np, int preSmooth, bool onlyLargest, bool fillBubbles, bool verbose) {
 // img: input volume
 // hdr: nifti header
 // isolevel: air/surface threshold
@@ -706,9 +705,9 @@ int meshify(float * img, nifti_1_header * hdr, float isolevel, vec3i **t, vec3d 
 // nt: number of triangles, aka faces
 // np: number of points
 // preSmooth: Gaussian blur to soften image
-	int NX = hdr->dim[1];
-	int NY = hdr->dim[2];
-	int NZ = hdr->dim[3];
+	int NX = dim[0];
+	int NY = dim[1];
+	int NZ = dim[2];
 	if (preSmooth) {
 		double startTime = clockMsec();
 		quick_smooth(img, NX, NY, NZ);
@@ -722,8 +721,6 @@ int meshify(float * img, nifti_1_header * hdr, float isolevel, vec3i **t, vec3d 
 		mx = fmaxf(mx, img[i]);
 		mn = fminf(mn, img[i]);
 	}
-	if (isnan(isolevel))
-		isolevel = 0.5 * (mn + mx);
 	if (mn == mx) {
 		printf("Error: No variability in image intensity.\n");
 		return EXIT_FAILURE;
@@ -783,7 +780,7 @@ int meshify(float * img, nifti_1_header * hdr, float isolevel, vec3i **t, vec3d 
 	//printf("Bounding box for bright voxels: %d..%d %d..%d %d..%d\n", lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
 	for (int i=0;i<3;i++) {
 		lo[i] = MAX(lo[i] - 1, 0);
-		hi[i] = MIN(hi[i] + 2, hdr->dim[i+1]);
+		hi[i] = MIN(hi[i] + 2, dim[i]);
 	}
 	// Polygonise the grid
 	double startTimeMC = clockMsec();
@@ -1068,9 +1065,6 @@ int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 int save_gii(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz){
 	//https://www.nitrc.org/projects/gifti/
 	//https://stackoverflow.com/questions/342409/how-do-i-base64-encode-decode-in-c
-	typedef struct {
-		uint32_t n, x,y,z;
-	} vec4i;
 	FILE *fp = fopen(fnm,"wb");
 	if (fp == NULL)
 		return EXIT_FAILURE;

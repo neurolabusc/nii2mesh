@@ -1,7 +1,8 @@
-// gcc -O3 -DHAVE_ZLIB nii2mesh.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz
-// clang -O1 -g -fsanitize=address -fno-omit-frame-pointer -DHAVE_ZLIB nii2mesh.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz
+// gcc -O3 -DHAVE_ZLIB nii2mesh.c meshify.c isolevel.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz
+// clang -O1 -g -fsanitize=address -fno-omit-frame-pointer -DHAVE_ZLIB nii2mesh.c meshify.c isolevel.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz
 
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
@@ -10,6 +11,7 @@
 #include "meshify.h"
 #include "nifti1.h"
 #include "quadric.h"
+#include "isolevel.h"
 #if defined(_OPENMP)
 	#include <omp.h>
 #endif
@@ -52,14 +54,16 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 		int bytes_read = gzread(fgz, hdr, sizeof(nifti_1_header));
 		gzclose(fgz);
 		isGz = true;
+		if (bytes_read < sizeof(nifti_1_header)) return NULL;
 	}
 	#endif
 	if (!isGz) {
 		FILE *fp = fopen(hdrnm,"rb");
 		if (fp == NULL)
 			return NULL;
-		size_t sz = fread(hdr, sizeof(nifti_1_header), 1, fp);
+		size_t bytes_read = fread(hdr, sizeof(nifti_1_header), 1, fp);
 		fclose(fp);
+		if (bytes_read < sizeof(nifti_1_header)) return NULL;
 	}
 	uint16_t sig = 348;
 	uint16_t fwd = hdr->sizeof_hdr;
@@ -111,6 +115,7 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 		fseek(fp, (int)hdr->vox_offset, SEEK_SET);
 		size_t sz = fread(imgRaw, nvox*bpp, 1, fp);
 		fclose(fp);
+		if (sz < (nvox*bpp)) return NULL;
 	}
 	if (hdr->datatype == DT_UINT8) {
 		uint8_t * img8 = (uint8_t *) imgRaw;
@@ -130,14 +135,6 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 			img32[i] = (img32w[i] * hdr->scl_slope) + hdr->scl_inter;
 	}
 	free(imgRaw);
-	float mn = img32[0];
-	float mx = mn;
-	for (int i = 0; i < nvox; i++) {
-		mn = fmin(mn, img32[i]);
-		mx = fmax(mx, img32[i]);
-	}
-	hdr->cal_min = mn;
-	hdr->cal_max = mx;
 	return img32;
 }
 
@@ -145,7 +142,8 @@ int nii2 (nifti_1_header hdr, float * img, float isolevel, float reduceFraction,
 	vec3d *pts = NULL;
 	vec3i *tris = NULL;
 	int ntri, npt;
-	if (meshify(img, &hdr, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
+	size_t dim[3] = {hdr.dim[1], hdr.dim[2], hdr.dim[3]};
+	if (meshify(img, dim, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 	apply_sform(tris, pts, ntri, npt, hdr.srow_x, hdr.srow_y, hdr.srow_z);
 	double startTime = clockMsec();
@@ -179,7 +177,8 @@ int nii2 (nifti_1_header hdr, float * img, float isolevel, float reduceFraction,
 
 int main(int argc,char **argv) {
 	#define mxStr 1024
-	float isolevel = NAN;
+	float isolevel = 0.0;
+	int isoDarkMediumBright123 = 2;
 	float reduceFraction = 0.25;
 	int preSmooth = true;
 	bool onlyLargest = true;
@@ -190,12 +189,12 @@ int main(int argc,char **argv) {
 	char atlasFilename[mxStr] = "";
 	// Check the command line, minimal is name of input and output files
 	if (argc < 3) {
-		printf("Converts a NIfTI voxelwise image to triangulated mesh.\n");
-		printf("Usage: %s [options] niftiname meshname\n",argv[0]);
+		printf("Converts a NIfTI voxelwise volume to triangulated mesh.\n");
+		printf("Usage: %s inputNIfTI [options] outputMesh\n",argv[0]);
 		printf("Options\n");
 		printf("    -a s    atlas text file (e.g. '-a D99_v2.0_labels_semicolon.txt')\n");
 		printf("    -b v    bubble fill (0=bubbles included, 1=bubbles filled, default %d)\n", fillBubbles);
-		printf("    -i v    isosurface intensity (default mid-range)\n");
+		printf("    -i v    isosurface intensity (d=dark, m=mid, b=bright, number for custom, default medium)\n");
 		printf("    -l v    only keep largest cluster (0=all, 1=largest, default %d)\n", onlyLargest);
 		printf("    -p v    pre-smoothing (0=skip, 1=smooth, default %d)\n", preSmooth);
 		printf("    -r v    reduction factor (default %g)\n", reduceFraction);
@@ -203,50 +202,68 @@ int main(int argc,char **argv) {
 		printf("    -s v    post-smoothing iterations (default %d)\n", postSmooth);
 		printf("    -v v    verbose (0=silent, 1=verbose, default %d)\n", verbose);
 		printf("mesh extension sets format (.gii, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
-		printf("Example: '%s myInput.nii myOutput.obj'\n",argv[0]);
-		printf("Example: '%s -i 22 myInput.nii myOutput.obj'\n",argv[0]);
-		printf("Example: '%s -p 0 img.nii out.ply'\n",argv[0]);
-		printf("Example: '%s -v 1 img.nii out.ply'\n",argv[0]);
-		printf("Example: '%s -r 0.1 img.nii small.gii'\n",argv[0]);
+		printf("Example: '%s voxels.nii mesh.obj'\n",argv[0]);
+		printf("Example: '%s bet.nii.gz -i 22 myOutput.obj'\n",argv[0]);
+		printf("Example: '%s bet.nii.gz -i b bright.obj'\n",argv[0]);
+		printf("Example: '%s img.nii -v 1 out.ply'\n",argv[0]);
+		printf("Example: '%s img.nii -p 0 -r 1 large.ply'\n",argv[0]);
+		printf("Example: '%s img.nii -r 0.1 small.gii'\n",argv[0]);
 		exit(-1);
 	}
-	// Parse the command line
-	for (int i=1;i<argc;i++) {
-		if (strcmp(argv[i],"-a") == 0)
-			strcpy(atlasFilename, argv[i+1]);
-			//isAtlas = atoi(argv[i+1]);
-		if (strcmp(argv[i],"-b") == 0)
-			fillBubbles = atoi(argv[i+1]);
-		if (strcmp(argv[i],"-i") == 0)
-			isolevel = atof(argv[i+1]);
-		if (strcmp(argv[i],"-l") == 0)
-			onlyLargest = atoi(argv[i+1]);
-		if (strcmp(argv[i],"-p") == 0)
-			preSmooth = atoi(argv[i+1]);
-		if (strcmp(argv[i],"-q") == 0)
-			quality = atoi(argv[i+1]);
-		if (strcmp(argv[i],"-s") == 0)
-			postSmooth = atoi(argv[i+1]);
-		if (strcmp(argv[i],"-r") == 0)
-			reduceFraction = atof(argv[i+1]);
-		if (strcmp(argv[i],"-v") == 0)
-			verbose = atoi(argv[i+1]);
+	// Parse options (if any)
+	if (argc > 3) {
+		for (int i=2;i<(argc-1);i++) {
+			if (strcmp(argv[i],"-a") == 0)
+				strcpy(atlasFilename, argv[i+1]);
+				//isAtlas = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-b") == 0)
+				fillBubbles = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-i") == 0) {
+				if (strlen(argv[i+1]) < 1) continue;
+				if (toupper(argv[i+1][0]) == 'D')
+					isoDarkMediumBright123 = 1;
+				else if (toupper(argv[i+1][0]) == 'M')
+					isoDarkMediumBright123 = 2;
+				else if (toupper(argv[i+1][0]) == 'B')
+					isoDarkMediumBright123 = 3;
+				else {
+					isoDarkMediumBright123 = 0; //custom
+					isolevel = atof(argv[i+1]);
+				}
+			}
+			if (strcmp(argv[i],"-l") == 0)
+				onlyLargest = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-p") == 0)
+				preSmooth = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-q") == 0)
+				quality = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-s") == 0)
+				postSmooth = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-r") == 0)
+				reduceFraction = atof(argv[i+1]);
+			if (strcmp(argv[i],"-v") == 0)
+				verbose = atoi(argv[i+1]);
+		}
 	}
 	nifti_1_header hdr;
 	double startTime = clockMsec();
-	float * img = load_nii(argv[argc-2], &hdr);
+	float * img = load_nii(argv[1], &hdr);
 	if (verbose)
 		printf("load from disk: %ld ms\n", timediff(startTime, clockMsec()));
 	if (img == NULL)
 		exit(EXIT_FAILURE);
 	int ret = EXIT_SUCCESS;
+	int nvox = (hdr.dim[1] * hdr.dim[2] * hdr.dim[3]);
 	if (strlen(atlasFilename) > 0) {
-		int nLabel = trunc(hdr.cal_max);
 		onlyLargest = false;
-		if ((hdr.cal_min < 0.0) || (hdr.cal_max < 1.0) || ((hdr.cal_max - hdr.cal_min) < 1.0)) {
+		float mx = img[0];
+		for (int i = 0; i <= nvox; i++)
+			mx = fmax(img[i], mx);
+		if (mx < 1.0) {
 			printf("intensity range not consistent with an indexed atlas %g..%g\n", hdr.cal_min, hdr.cal_max);
 			exit(EXIT_FAILURE);
 		}
+		int nLabel = trunc(mx);
 		char basenm[mxStr], ext[mxStr] = "";
 		//look for text file, e.g. atlas.nii.gz -> atlas.txt
 		#define kLabelStrLen 32
@@ -275,7 +292,6 @@ int main(int argc,char **argv) {
 		strip_ext(basenm); // ~/file.nii -> ~/file
 		if (strlen(argv[argc-1]) > strlen(basenm))
 			strcpy(ext, argv[argc-1] + strlen(basenm));
-		int nvox = (hdr.dim[1] * hdr.dim[2] * hdr.dim[3]);
 		#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 			int maxNumThreads = omp_get_max_threads();
 			printf("Using %d threads\n", maxNumThreads);
@@ -287,7 +303,6 @@ int main(int argc,char **argv) {
 			partial_OK = 0;
 			nOK = 0;
 			#pragma omp for
-			
 			for (int i = 1; i <= nLabel; i++) {
 				printf("%d/%d\n", i, nLabel);
 				float * imgbinary = (float *) malloc(nvox*sizeof(float));
@@ -320,9 +335,11 @@ int main(int argc,char **argv) {
 		printf("Converted %d regions of interest\n", nOK);
 		if (nOK == 0)
 			ret = EXIT_FAILURE;
-		
-	} else
+	} else {
+		if (isoDarkMediumBright123 != 0) //user did not provide numeric isosurface brightness
+			isolevel = setThreshold(img, nvox, isoDarkMediumBright123);
 		ret = nii2(hdr, img, isolevel, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, argv[argc-1], quality);
+	}
 	free(img);
 	exit(ret);
 }
