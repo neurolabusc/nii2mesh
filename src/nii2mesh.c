@@ -282,7 +282,14 @@ int main(int argc,char **argv) {
 					if ((i < 0) || (i > nLabel)) continue;
 					strncpy(s, strtok(NULL,";"), mxStr);
 					//strncpy(atlasLabels[i], strtok(NULL,";"), mxStr);
-					if (snprintf (atlasLabels[i], kLabelStrLen-1, "%s.k%d", s, i) < 0) exit(EXIT_FAILURE);
+					int len = snprintf (atlasLabels[i], kLabelStrLen-1, "%s.k%d", s, i);
+					if (len < 0) exit(EXIT_FAILURE);
+					//remove illegal characters, e.g. 'PACo/Pir' -> 'PACo-Pir'
+					if (len < 1) continue;
+					for (int j = 0; j < len; j++)
+						if ((atlasLabels[i][j] < 1) || (atlasLabels[i][j] == ' ') || (atlasLabels[i][j] == ',') || (atlasLabels[i][j] == '/') || (atlasLabels[i][j] == '\\') || (atlasLabels[i][j] == '%') || (atlasLabels[i][j] == '*') || (atlasLabels[i][j] == 9) || (atlasLabels[i][j] == 10) || (atlasLabels[i][j] == 11) || (atlasLabels[i][j] == 13))
+							atlasLabels[i][j] = '-';
+					if (i == 508) printf(">>>>>%s\n", atlasLabels[i]);
 				}
 				fclose(fp);
 			}

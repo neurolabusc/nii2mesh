@@ -545,7 +545,7 @@ int unify_vertices(vec3d **inpt, vec3i *tris, int ntri, bool verbose) {
 }
 
 int remove_degenerate_triangles(vec3d *pts, vec3i **intris, int ntri, bool verbose) {
-	//reduces the number of vertices, number of faces unchanged
+	//reduces the number of triangles, number of vertices unchanged
 	double startTime = clockMsec();
 	vec3i *tris = *intris;
 	int *isdegenerate = (int *) malloc(ntri * sizeof(int));

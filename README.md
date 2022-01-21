@@ -96,7 +96,7 @@ nii2mesh bet.nii.gz -i 120 -r 1 -p 0 -s 100 s100.ply
 
 ![Influence of smoothing](s0s100.jpg)
 
-6. The reduction factor allows you to simplify the mesh, resulting in a much smaller file size and faster renderng on slow hardware. This stage uses [Sven Forstmann's](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) simplification method which is [adaptive](http://www.alecjacobson.com/weblog/?p=4444), using smaller triangles in regions of curvature and large triangles in flat regions. Choosing a value of `-r 0.15` will eliminate 85% of the triangles. Notice how similar the top row appears, while the bottom row illustrates a dramatic reduction in complexity.
+6. The reduction factor allows you to simplify the mesh, resulting in a much smaller file size and faster rendering on slow hardware. This stage uses [Sven Forstmann's](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) simplification method which is [adaptive](http://www.alecjacobson.com/weblog/?p=4444), using smaller triangles in regions of curvature and large triangles in flat regions. Choosing a value of `-r 0.15` will eliminate 85% of the triangles. Notice how similar the top row appears, while the bottom row illustrates a dramatic reduction in complexity.
 
 ```
 nii2mesh bet.nii.gz -r 0.5 r50.ply
@@ -133,7 +133,7 @@ Alternatively, you can provide the file name for a semicolon delimited text file
 We could use this with the command:
 
 ```
-nii2mesh -a D99_v2.0_labels_semicolon.txt D99_atlas_v2.0_right.nii.gz D99_.gii
+nii2mesh D99_atlas_v2.0_right.nii.gz -a D99_v2.0_labels_semicolon.txt D99_.gii
 ```
 
 with the resulting meshes have the file names `D99_pu.k1.gii`, `D99_cd.k2.gii`, etc.
@@ -164,7 +164,7 @@ nii2mesh is a general mesh making method, which can be applied to any NIfTI imag
 For brain specific printing, you may want to look at these tutorials.
 
  - [nii\_nii2stl](https://github.com/rordenlab/spmScripts/blob/master/nii_nii2stl.m) uses Matlab and SPM.
- - [Fei Gu](https://flashsherlock.github.io/2021/10/23/how-to-print-your-brain/) uses FreeSrufer, MeshLab and Meshmixer.
+ - [Fei Gu](https://flashsherlock.github.io/2021/10/23/how-to-print-your-brain/) uses FreeSurfer, MeshLab and Meshmixer.
  - [Michael Notter](https://github.com/miykael/3dprintyourbrain) uses FreeSurfer and MeshLab.
  - This [Instructables](https://www.instructables.com/3D-print-your-own-brain/) tutorial uses FreeSurfer and MeshLab.
  - [Mohan Gupta](https://www.mohanwugupta.com/post/3d_brain_printing/) uses FreeSurfer and MeshLab.
@@ -174,11 +174,11 @@ For brain specific printing, you may want to look at these tutorials.
 
  - This project extends Cory Bloyd's marching cubes implementation described in [Paul Bourke's](http://paulbourke.net/geometry/polygonise/) seminal web page.
  - This project includes a C port of [Sven Forstmann's C++ fast mesh simplification](https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification) using [quadric error metrics](http://www.cs.cmu.edu/~./garland/Papers/quadric2.pdf).
- - [Laplacian smooth with Humphrey’s Classes to preserve volume](https://doi.org/10.1111/1467-8659.00334), also as [PDF](http://informatikbuero.com/downloads/Improved_Laplacian_Smoothing_of_Noisy_Surface_Meshes.pdf).
+ - For post-smoothing, this project uses a [Laplacian smooth with Humphrey’s Classes to preserve volume](https://doi.org/10.1111/1467-8659.00334), also available as a [PDF](http://informatikbuero.com/downloads/Improved_Laplacian_Smoothing_of_Noisy_Surface_Meshes.pdf).
  - AFNI [IsoSurface](https://afni.nimh.nih.gov/pub/dist/doc/program_help/IsoSurface.html) using an [efficient marching cubes implementation](https://www.researchgate.net/publication/228537283_Efficient_Implementation_of_Marching_Cubes%27_Cases_with_Topological_Guarantees). Likewise, AFNI [SurfMesh](https://afni.nimh.nih.gov/pub/dist/doc/program_help/SurfMesh.html) provides a [similar mesh simplification algorithm](https://faculty.cc.gatech.edu/~turk/my_papers/memless_tvcg99.pdf).
  - [Alec Jacobson has a nice demonstration of adaptive mesh simplification versus decimation](http://www.alecjacobson.com/weblog/?p=4444).
  - [Alec Jacobson](https://github.com/alecjacobson/geometry-processing-smoothing) describes smoothing and provides example noisy meshes.
  - MRtrix3 includes [voxel2mesh](https://mrtrix.readthedocs.io/en/latest/reference/commands/voxel2mesh.html)
- - [iso2mesh.sourceforge.net](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi) are a set of Matlab/Octave tools for mesh generation and refinement.
+ - [iso2mesh](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi) provides a set of Matlab/Octave methods for mesh generation and refinement ([with more details on GitHub](https://github.com/fangq/iso2mesh)).
  - FSL [FIRST](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FIRST/UserGuide) automates tissue segmentation.
  - [nii\_2\_mesh\_conversion.py](https://github.com/MahsaShk/MeshProcessing) is related to nii2mesh: it converts a binary NIfTI image to a mesh in STL format using VTK the package.
