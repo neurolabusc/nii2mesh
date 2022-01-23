@@ -32,5 +32,6 @@ base64.cpp was written by Jouni Malinen and is distributed under the BSD license
 
 simplify.h was written by Sven Forstmann and distributed under the MIT license. https://github.com/sp4cerat/Fast-Quadric-Mesh-Simplification
 
-The software can be optionally compiled to use the radixsort files written by Cameron Hart (2014) using the zlib license. https://github.com/bitshifter/radixsort
+The software uses the radixsort files written by Cameron Hart (2014) using the zlib license. https://github.com/bitshifter/radixsort
 
+The software has the option (`-DHAVE_JSON`) to include the cJSON files written by Dave Gamble (2009-2017) using the MIT license (https://github.com/DaveGamble/cJSON). This allows support for saving to JMesh Format (https://github.com/fangq/jmesh). The JMesh, JSON and OFF file saving routines were written by Qianqian Fang (2022) and use the BSD 2-Clause license.

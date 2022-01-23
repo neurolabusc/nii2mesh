@@ -141,13 +141,16 @@ with the resulting meshes have the file names `D99_pu.k1.gii`, `D99_cd.k2.gii`, 
 
 ## Supported Mesh Formats
 
-nii2mesh can save meshes to the GIfTI (.gii), mz3, obj, ply, FreeSurfer (.pial), stl, vtk.  [MeshLab](https://www.meshlab.net) can export meshes to many other formats. Therefore, one option is to create a PLY mesh with nii2mesh and use MeshLab to export to your favorite format.
+nii2mesh can save meshes to the GIfTI (.gii), json, jmsh, mz3, obj, off, ply, FreeSurfer (.pial), stl, vtk.  [MeshLab](https://www.meshlab.net) can export meshes to many other formats. Therefore, one option is to create a PLY mesh with nii2mesh and use MeshLab to export to your favorite format.
 
  - [GIfTI](https://www.nitrc.org/projects/gifti/) is a popular Geometry format for Neuroimaging. The usage of base64 encoding leads to relatively large files and slow loading.
  - [OBJ](http://www.paulbourke.net/dataformats/obj/) format is very popular, and may be a great choice for 3D printing. The use of ASCII rather than binary encoding makes these files large, slow to read and typically suggests limited precision.
+ - [OFF](https://en.wikipedia.org/wiki/OFF_(file_format)) is a classic ASCII format.
  - [PLY](http://paulbourke.net/dataformats/ply/) is an old format that is widely supported. The binary form created by nii2mesh yields small files and quick loading time.
  - [MZ3](https://github.com/neurolabusc/surf-ice/tree/master/mz3) is the native format of [Surfice](https://www.nitrc.org/projects/surfice/). It is small and fast, but not widely supported.
  - [FreeSurfer](https://surfer.nmr.mgh.harvard.edu) format is simple and used by FreeSurfer.
+ - [json](https://github.com/fangq/jmesh) creates human readable ASCII JSON files in the format described by [jmesh](https://github.com/fangq/jmesh). Be aware that other tools create legal JSON files to describe triangular meshes using a structure that is not compatible with json.
+ - [jmsh](https://github.com/fangq/jmesh) files are in the [jmesh](https://github.com/fangq/jmesh) format, which inserts a compressed binary stream into a human readable JSON file. Supporting this format slightly increases the size of the executable (using the optional `-DHAVE_JSON` compiler flag and `cJSON` files).
  - [VTK](http://www.princeton.edu/~efeibush/viscourse/vtk.pdf) refers to the legacy VTK format, which is supported by many tools (unlike the more flexible modern XML-based VTK formats).
  - [STL](http://www.paulbourke.net/dataformats/stl/) format is popular for 3D printing. You should use any other format unless required. This format does not re-use vertices across triangles, this results in very large files. Further, this means the meshes are either slow to load or appear to have a faceted jagged appearance.
 
@@ -169,6 +172,17 @@ For brain specific printing, you may want to look at these tutorials.
  - This [Instructables](https://www.instructables.com/3D-print-your-own-brain/) tutorial uses FreeSurfer and MeshLab.
  - [Mohan Gupta](https://www.mohanwugupta.com/post/3d_brain_printing/) uses FreeSurfer and MeshLab.
  - [Ford Burles](https://fordburles.com/3d-print-brain-guide.html) uses FreeSurfer and MeshLab or Blender.
+ 
+## Limitations
+
+Similar to most mesh tools, nii2mesh uses fast algorithms that can generate self intersecting triangles. If you are conducting analyses where this is undesirable (e.g boundary element method (BEM) and finite element method (FEM) computations) you should consider (slower) algorithms that prevent these [features](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0184206). If you are interested in these applications, you may want to consider [iso2mesh](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi).
+
+If you generate meshes that are only a single object (`-l 1`) that is watertight (e.g. bubble-filled, `-b 1`) you can fix self intersections with [MeshFix](https://github.com/MarcoAttene/MeshFix-V2.1):
+
+```
+nii2mesh bet.nii.gz -b 1 -l 1 bet.ply
+MeshFix bet.ply better.ply
+```
 
 ## Links
 

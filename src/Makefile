@@ -3,7 +3,7 @@ CNAME=gcc
 #linker flags
 LFLAGS=-lz -lm
 #c flags
-CFLAGS=-O3 -DHAVE_ZLIB
+CFLAGS=-O3 -DHAVE_ZLIB -DHAVE_JSON
 NOTES=
 ifeq ($(CXX),g++)
 	#not valid for c++
@@ -23,5 +23,5 @@ endif
 
 all:
 	$(info $(NOTES))
-	$(CNAME) $(CFLAGS) nii2mesh.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh $(LFLAGS)
+	$(CNAME) $(CFLAGS) nii2mesh.c cJSON.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh $(LFLAGS)
 	

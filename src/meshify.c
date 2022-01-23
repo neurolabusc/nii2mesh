@@ -7,12 +7,20 @@
 #include <time.h>
 #ifdef HAVE_ZLIB
 	#include <zlib.h>
+	#ifdef HAVE_JSON
+		#include "cJSON.h"
+	#endif
 #endif
 #include "meshify.h"
 #include "base64.h" //required for GIfTI
 #include "nifti1.h"
 #include "bwlabel.h"
 #include "radixsort.h"
+
+#ifndef MIN
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+#endif
 
 typedef struct {
 	vec3d p000;
@@ -544,6 +552,11 @@ int unify_vertices(vec3d **inpt, vec3i *tris, int ntri, bool verbose) {
 	return nnew;
 }
 
+#ifndef FLT_EPSILON
+#define FLT_EPSILON 1.19209290e-07F // float
+//#define DBL_EPSILON 2.2204460492503131e-16 // double
+#endif
+
 int remove_degenerate_triangles(vec3d *pts, vec3i **intris, int ntri, bool verbose) {
 	//reduces the number of triangles, number of vertices unchanged
 	double startTime = clockMsec();
@@ -551,15 +564,30 @@ int remove_degenerate_triangles(vec3d *pts, vec3i **intris, int ntri, bool verbo
 	int *isdegenerate = (int *) malloc(ntri * sizeof(int));
 	int ndegenerate = 0;
 	for (int i=0;i<ntri;i++) {
-		//sorted lengths a,b,c, degenerate if a + b <= c
-		double a = dx(pts[tris[i].x], pts[tris[i].y]);
-		double b = dx(pts[tris[i].x], pts[tris[i].z]);
-		double c = dx(pts[tris[i].y], pts[tris[i].z]);
-		double lo = fmin(fmin(a, b), c);
-		double hi = fmax(fmax(a, b), c);
-		double mid = a+b+c-lo-hi;
-		isdegenerate[i] = (lo + mid) <= hi;
-		ndegenerate += isdegenerate[i];
+		//sorted lengths a ≥ b ≥ c
+		isdegenerate[i] = 0;
+		double l = dx(pts[tris[i].x], pts[tris[i].y]);
+		double m = dx(pts[tris[i].x], pts[tris[i].z]);
+		double n = dx(pts[tris[i].y], pts[tris[i].z]);
+		double c = fmin(fmin(l, m), n);
+		double a = fmax(fmax(l, m), n);
+		double b = l+m+n-a-c;
+		if ((c-(a-b)) <= 0.0) {
+			isdegenerate[i] = 1;
+			ndegenerate ++;
+			continue;
+		}
+		#define REQUIRE_SIGNIFICANT_AREA
+		#ifdef REQUIRE_SIGNIFICANT_AREA
+		//use Heron’s Formula to eliminate triangles of tiny area
+		// see Kahan: Miscalculating Area and Angles of a Needle-like Triangle
+		// https://people.eecs.berkeley.edu/~wkahan/Triangle.pdf
+		double area4 = 0.25 * sqrt( (a+(b+c)) * (c-(a-b)) * (c+(a-b)) * (a+(b-c)) );
+		if (area4 < FLT_EPSILON) {
+			isdegenerate[i] = 1;
+			ndegenerate ++;
+		}
+		#endif //REQUIRE_SIGNIFICANT_AREA
 	}
 	if (ndegenerate == 0) {
 		free(isdegenerate);
@@ -692,10 +720,6 @@ long timediff(double startTimeMsec, double endTimeMsec) {
 	return round(endTimeMsec - startTimeMsec);
 }
 
-#ifndef MIN
-#define MIN(a,b) (((a)<(b))?(a):(b))
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#endif
 int meshify(float * img, size_t dim[3], float isolevel, vec3i **t, vec3d **p, int *nt, int *np, int preSmooth, bool onlyLargest, bool fillBubbles, bool verbose) {
 // img: input volume
 // hdr: nifti header
@@ -905,6 +929,162 @@ int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 	return EXIT_SUCCESS;
 }
 
+#ifdef HAVE_ZLIB
+#ifdef HAVE_JSON
+
+enum TZipMethod {zmZlib, zmGzip, zmBase64, zmLzip, zmLzma, zmLz4, zmLz4hc};
+
+int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize, unsigned char **outputbuf, const int zipid, int *ret, const int iscompress){
+	z_stream zs;
+	size_t buflen[2]={0};
+	*outputbuf=NULL;
+	zs.zalloc = Z_NULL;
+	zs.zfree = Z_NULL;
+	zs.opaque = Z_NULL;
+	if(inputsize==0)
+		return -1;
+	if(iscompress){
+		/** perform compression or encoding   */
+		if(zipid==zmBase64){
+			/** base64 encoding  */
+			*outputbuf=base64_encode((const unsigned char*)inputstr, inputsize, outputsize);
+		}else if(zipid==zmZlib){
+			/** zlib (.zip) or gzip (.gz) compression  */
+			if(deflateInit(&zs,  (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress)) != Z_OK)
+				return -2;
+			buflen[0] =deflateBound(&zs,inputsize);
+			*outputbuf=(unsigned char *)malloc(buflen[0]);
+			zs.avail_in = inputsize; /* size of input, string + terminator*/
+			zs.next_in = (Bytef *)inputstr; /* input char array*/
+			zs.avail_out = buflen[0]; /* size of output*/
+			zs.next_out =  (Bytef *)(*outputbuf); /*(Bytef *)(); // output char array*/
+			*ret=deflate(&zs, Z_FINISH);
+			*outputsize=zs.total_out;
+			if(*ret!=Z_STREAM_END && *ret!=Z_OK)
+				return -3;
+			deflateEnd(&zs);
+		}else{
+			return -7;
+		}
+	}else{
+		/** perform decompression or decoding */
+		if(zipid==zmBase64){
+			/** base64 decoding  */
+			*outputbuf=base64_decode((const unsigned char*)inputstr, inputsize, outputsize);
+		}else if(zipid==zmZlib){
+			/** zlib (.zip) or gzip (.gz) decompression */
+			int count=1;
+			if(zipid==zmZlib)
+				if(inflateInit(&zs) != Z_OK)
+					return -2;
+			buflen[0] =inputsize*20;
+			*outputbuf=(unsigned char *)malloc(buflen[0]);
+			zs.avail_in = inputsize; /* size of input, string + terminator*/
+			zs.next_in =inputstr; /* input char array*/
+			zs.avail_out = buflen[0]; /* size of output*/
+			zs.next_out =  (Bytef *)(*outputbuf); /*(Bytef *)(); // output char array*/
+			while((*ret=inflate(&zs, Z_SYNC_FLUSH))!=Z_STREAM_END && count<=10){
+				*outputbuf=(unsigned char *)realloc(*outputbuf, (buflen[0]<<count));
+				zs.next_out =  (Bytef *)(*outputbuf+(buflen[0]<<(count-1)));
+				zs.avail_out = (buflen[0]<<(count-1)); /* size of output*/
+				count++;
+			}
+			*outputsize=zs.total_out;
+
+			if(*ret!=Z_STREAM_END && *ret!=Z_OK)
+				return -3;
+			inflateEnd(&zs);
+		}else{
+			return -7;
+		}
+	}
+	return 0;
+}
+
+int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+	FILE *fp;
+	cJSON *root=NULL, *hdr=NULL, *node=NULL, *face=NULL;
+	char *jsonstr=NULL;
+	int dim[2]={0,3}, len[2]={1,0};
+	size_t compressedbytes, totalbytes;
+	unsigned char *compressed=NULL, *buf=NULL;
+	int ret=0, status=0;
+	root=cJSON_CreateObject();
+	cJSON_AddItemToObject(root,  "_DataInfo_", hdr = cJSON_CreateObject());
+	cJSON_AddStringToObject(hdr, "JMeshVersion", "0.5");
+	cJSON_AddStringToObject(hdr, "Comment", "Created by nii2mesh");
+	cJSON_AddItemToObject(root,  "MeshVertex3", node = cJSON_CreateObject());
+	cJSON_AddStringToObject(node,"_ArrayType_","double");
+	dim[0]=npt;
+	cJSON_AddItemToObject(node,  "_ArraySize_",cJSON_CreateIntArray(dim,2));
+	cJSON_AddStringToObject(node,"_ArrayZipType_","zlib");
+	len[1]=dim[0]*dim[1];
+	cJSON_AddItemToObject(node,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
+	totalbytes=dim[0]*dim[1]*sizeof(pts[0].x);
+	ret=zmat_run(totalbytes, (unsigned char *)&(pts[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	if(!ret){
+		 ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
+		 cJSON_AddStringToObject(node,  "_ArrayZipData_",(char *)buf);
+	}
+	if(compressed){
+		free(compressed);
+		compressed=NULL;
+	}
+	if(buf){
+		free(buf);
+		buf=NULL;
+	}
+	cJSON_AddItemToObject(root,  "MeshTri3", face = cJSON_CreateObject());
+	cJSON_AddStringToObject(face,"_ArrayType_","uint32");
+	dim[0]=ntri;
+	cJSON_AddItemToObject(face,  "_ArraySize_",cJSON_CreateIntArray(dim,2));
+	cJSON_AddStringToObject(face,"_ArrayZipType_","zlib");
+	len[1]=dim[0]*dim[1];
+	cJSON_AddItemToObject(face,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
+	totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
+	ret=zmat_run(totalbytes, (unsigned char *)&(tris[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	if(!ret){
+		ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
+		cJSON_AddStringToObject(face,  "_ArrayZipData_",(char *)buf);
+	}
+	if(compressed)
+		free(compressed);
+	if(buf)
+		free(buf);
+	jsonstr=cJSON_Print(root);
+	if(jsonstr==NULL)
+		return EXIT_FAILURE;
+	fp=fopen(fnm,"wt");
+	if(fp==NULL)
+		return EXIT_FAILURE;
+	fprintf(fp,"%s\n",jsonstr);
+	fclose(fp);
+	if(jsonstr)
+		free(jsonstr);
+	if(root)
+		cJSON_Delete(root);
+	return EXIT_SUCCESS;
+}
+#endif //HAVE_JSON
+#endif //HAVE_ZLIB
+
+int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+	FILE *fp = fopen(fnm,"w");
+	if (fp == NULL)
+		return EXIT_FAILURE;
+	fprintf(fp,"{\n");
+	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh\"\n\t},\n");
+	fprintf(fp,"\t\"MeshVertex3\":[\n");
+	for (int i=0;i<npt;i++)
+		fprintf(fp, "[%g,\t%g,\t%g],\n", pts[i].x, pts[i].y,pts[i].z);
+	fprintf(fp,"\t],\n\t\"MeshTri3\":[\n");
+	for (int i=0;i<ntri;i++)
+		fprintf(fp, "[%d,\t%d,\t%d],\n", tris[i].x+1, tris[i].y+1, tris[i].z+1);
+	fprintf(fp,"\t]\n}\n");
+	fclose(fp);
+	return EXIT_SUCCESS;
+}
+
 int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz) {
 //https://github.com/neurolabusc/surf-ice/tree/master/mz3
 	struct __attribute__((__packed__)) mz3hdr {
@@ -974,6 +1154,20 @@ int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	free(pts32);
 	return EXIT_SUCCESS;
 }
+
+int save_off(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+	FILE *fp = fopen(fnm,"w");
+	if (fp == NULL)
+		return EXIT_FAILURE;
+	fprintf(fp,"OFF\n%d\t%d\t0\n",npt,ntri);
+	for (int i=0;i<npt;i++)
+		fprintf(fp, "%g %g %g\n", pts[i].x, pts[i].y,pts[i].z);
+	for (int i=0;i<ntri;i++)
+		fprintf(fp, "%d %d %d\n", tris[i].x+1, tris[i].y+1, tris[i].z+1);
+	fclose(fp);
+	return EXIT_SUCCESS;
+}
+
 int save_obj(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	FILE *fp = fopen(fnm,"w");
 	if (fp == NULL)
@@ -1019,7 +1213,7 @@ int save_stl(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	typedef struct  __attribute__((__packed__)) {
 		uint8_t n;
-		uint32_t x,y,z;
+		int32_t x,y,z;
 	} vec1b3i;
 	FILE *fp = fopen(fnm,"wb");
 	if (fp == NULL)
@@ -1039,7 +1233,7 @@ int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	char vfc[80];
 	sprintf(vfc, "element face %d\n", ntri);
 	fwrite(vfc, strlen(vfc), 1, fp);
-	fputs("property list uchar uint vertex_indices\n",fp);
+	fputs("property list uchar int vertex_indices\n",fp);
 	fputs("end_header\n",fp);
 	vec3s *pts32 = (vec3s *) malloc(npt * sizeof(vec3s));
 	for (int i = 0; i < npt; i++) { //double->single precision
@@ -1233,10 +1427,20 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 		strcpy(ext, fnm + strlen(basenm));
 	if (strstr(ext, ".gii"))
 		return save_gii(fnm, tris, pts, ntri, npt, isGz);
-	else if ((strstr(ext, ".pial")) || (strstr(ext, ".inflated")))
+	else if ((strstr(ext, ".inflated")) || (strstr(ext, ".pial")))
 		return save_freesurfer(fnm, tris, pts, ntri, npt);
+#ifdef HAVE_ZLIB
+#ifdef HAVE_JSON
+	else if (strstr(ext, ".jmsh"))
+		return save_jmsh(fnm, tris, pts, ntri, npt);
+#endif //HAVE_JSON
+#endif //HAVE_ZLIB
+	else if (strstr(ext, ".json"))
+		return save_json(fnm, tris, pts, ntri, npt);
 	else if (strstr(ext, ".mz3"))
 		return save_mz3(fnm, tris, pts, ntri, npt, isGz);
+	else if (strstr(ext, ".off"))
+		return save_off(fnm, tris, pts, ntri, npt);
 	else if (strstr(ext, ".obj"))
 		return save_obj(fnm, tris, pts, ntri, npt);
 	else if (strstr(ext, ".ply"))
