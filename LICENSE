@@ -24,7 +24,7 @@ CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-The PolygoniseCube function comes from Cory Bloyd's public domain Marching Cubes Example Program described here http://paulbourke.net/geometry/polygonise/
+If compiled with `USE_CLASSIC_CUBES`, the software uses Cory Bloyd's public domain Marching Cubes Example Program (see http://paulbourke.net/geometry/polygonise/). Otherwise, the software uses Thomas Lewiner's Marching Cubes algorithm, ported to C by Ziad Saad in 2004 (with improved tables added by Chris Rorden in 2022).
 
 The bwlabel.cpp file was written by Jesper Andersson, who has explicitly allowed this to be shared using the BSD 2-Clause license (above).
 

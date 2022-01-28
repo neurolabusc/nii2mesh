@@ -17,6 +17,10 @@ Use Otsu's method to provided reasonable isolevel thresholds
 #endif
 
 static bool isnanx(float f) { //isnan disabled by gcc -Ofast and -ffinite-math-only
+	return isnan(f);
+}
+/*
+static bool isnanx(float f) { //isnan disabled by gcc -Ofast and -ffinite-math-only
 //4byte IEEE: msb[31] = signbit, bits[23-30] exponent, bits[0..22] mantissa
 //exponent of all 1s =   Infinity, NAN or Indeterminate
 	uint32_t i = *(long *)&f;
@@ -26,7 +30,7 @@ static bool isnanx(float f) { //isnan disabled by gcc -Ofast and -ffinite-math-o
 	#else
 		return ((i&0x0000807f)==0x0000807f)&&(i&0xffff7f00);
 	#endif
-}
+}*/
 
 static int nifti_robust_range(float* img, int nvox, float *pct2, float *pct98, int ignoreZeroVoxels) {
 	//https://www.jiscmail.ac.uk/cgi-bin/webadmin?A2=fsl;31f309c1.1307

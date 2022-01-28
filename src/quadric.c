@@ -19,7 +19,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
-#include "meshify.h"
+#include "meshtypes.h"
 #include "quadric.h"
 #include <float.h> //FLT_EPSILON, DBL_EPSILON
 

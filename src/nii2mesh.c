@@ -1,5 +1,6 @@
-// gcc -O3 -DHAVE_ZLIB nii2mesh.c meshify.c isolevel.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz
-// clang -O1 -g -fsanitize=address -fno-omit-frame-pointer -DHAVE_ZLIB nii2mesh.c meshify.c isolevel.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz
+// gcc -O3 -DNII2MESH -DHAVE_ZLIB -DHAVE_JSON nii2mesh.c MarchingCubes.c cJSON.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
+// clang -O1 -g -fsanitize=address -fno-omit-frame-pointer -DNII2MESH -DHAVE_ZLIB -DHAVE_JSON nii2mesh.c MarchingCubes.c cJSON.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
+
 
 #include <stdio.h>
 #include <ctype.h>
@@ -138,12 +139,12 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 	return img32;
 }
 
-int nii2 (nifti_1_header hdr, float * img, float isolevel, float reduceFraction, int preSmooth, bool onlyLargest, bool fillBubbles, int postSmooth, bool verbose, char * outnm, int quality) {
+int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float reduceFraction, int preSmooth, bool onlyLargest, bool fillBubbles, int postSmooth, bool verbose, char * outnm, int quality) {
 	vec3d *pts = NULL;
 	vec3i *tris = NULL;
 	int ntri, npt;
 	size_t dim[3] = {hdr.dim[1], hdr.dim[2], hdr.dim[3]};
-	if (meshify(img, dim, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
+	if (meshify(img, dim, originalMC, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 	apply_sform(tris, pts, ntri, npt, hdr.srow_x, hdr.srow_y, hdr.srow_z);
 	double startTime = clockMsec();
@@ -185,6 +186,7 @@ int main(int argc,char **argv) {
 	bool fillBubbles = false;
 	int postSmooth = 0;
 	int quality = 1;
+	int originalMC = 0;
 	bool verbose = false;
 	char atlasFilename[mxStr] = "";
 	// Check the command line, minimal is name of input and output files
@@ -196,12 +198,19 @@ int main(int argc,char **argv) {
 		printf("    -b v    bubble fill (0=bubbles included, 1=bubbles filled, default %d)\n", fillBubbles);
 		printf("    -i v    isosurface intensity (d=dark, m=mid, b=bright, number for custom, default medium)\n");
 		printf("    -l v    only keep largest cluster (0=all, 1=largest, default %d)\n", onlyLargest);
+		#ifndef USE_CLASSIC_CUBES //Lewiner tables support both classic and enhanced variants
+		printf("    -o v    Original marching cubes (0=Improved Lewiner, 1=Original, default %d)\n", originalMC);
+		#endif
 		printf("    -p v    pre-smoothing (0=skip, 1=smooth, default %d)\n", preSmooth);
 		printf("    -r v    reduction factor (default %g)\n", reduceFraction);
 		printf("    -q v    quality (0=fast, 1= balanced, 2=best, default %d)\n", quality);
 		printf("    -s v    post-smoothing iterations (default %d)\n", postSmooth);
 		printf("    -v v    verbose (0=silent, 1=verbose, default %d)\n", verbose);
-		printf("mesh extension sets format (.gii, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+		#ifdef HAVE_JSON
+		printf("mesh extension sets format (.gii, .jmsh, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+		#else
+		printf("mesh extension sets format (.gii, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+		#endif
 		printf("Example: '%s voxels.nii mesh.obj'\n",argv[0]);
 		printf("Example: '%s bet.nii.gz -i 22 myOutput.obj'\n",argv[0]);
 		printf("Example: '%s bet.nii.gz -i b bright.obj'\n",argv[0]);
@@ -233,6 +242,8 @@ int main(int argc,char **argv) {
 			}
 			if (strcmp(argv[i],"-l") == 0)
 				onlyLargest = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-o") == 0)
+				originalMC = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-p") == 0)
 				preSmooth = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-q") == 0)
@@ -327,7 +338,7 @@ int main(int argc,char **argv) {
 				}
 				char outnm[mxStr];
 				if (snprintf(outnm,sizeof(outnm),"%s%s%s", basenm, atlasLabels[i], ext) < 0) exit(EXIT_FAILURE);
-				int reti = nii2(hdr, imgbinary, 0.5, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, outnm, quality);
+				int reti = nii2(hdr, imgbinary, originalMC, 0.5, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, outnm, quality);
 				if (reti == EXIT_SUCCESS)
 					partial_OK ++;
 				free(imgbinary);
@@ -343,7 +354,7 @@ int main(int argc,char **argv) {
 	} else {
 		if (isoDarkMediumBright123 != 0) //user did not provide numeric isosurface brightness
 			isolevel = setThreshold(img, nvox, isoDarkMediumBright123);
-		ret = nii2(hdr, img, isolevel, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, argv[argc-1], quality);
+		ret = nii2(hdr, img, originalMC, isolevel, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, argv[argc-1], quality);
 	}
 	free(img);
 	exit(ret);
