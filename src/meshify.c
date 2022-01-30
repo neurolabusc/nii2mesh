@@ -362,7 +362,7 @@ int meshify(float * img, size_t dim[3], int originalMC, float isolevel, vec3i **
 	if (marchingCubes(img, dim, lo, hi, originalMC, isolevel, &pts, &tris, &npt, &ntri) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 	if (verbose)
-		printf("marching cubes: %ld ms\n", timediff(startTimeMC, clockMsec()));
+		printf("marching cubes (%dx%dx%d): %ld ms\n", NX, NY, NZ, timediff(startTimeMC, clockMsec()));
 	npt = unify_vertices(&pts, tris, npt, ntri, verbose);
 	if (npt < 3) return EXIT_FAILURE;
 	ntri = remove_degenerate_triangles(pts, &tris, ntri, verbose);

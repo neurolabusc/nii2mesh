@@ -25,6 +25,12 @@ OLD=1 make
 
 If you have both [gcc](https://gcc.gnu.org) and [Clang LLVM](https://clang.llvm.org) compilers installed, you can use `CXX=clang` to explicitly select the Clang compiler. The environment variable `OMP=1` will compile with [OpenMP](https://www.openmp.org) which will use multiple threads to accelerate creation of atlas-based meshes. You can specify `JSON=1` to support saving meshes in [jmesh](https://github.com/OpenJData/jmesh) format. The `OLD=1` will use Cory Bloyd's classic Marching Cubes algorithm instead of Thomas Lewiner's optimized tables (the classic method is faster, but may not handle ambiguous edges as gracefully).
 
+The source code is **not** compatible with Microsoft C/C++ compiler (MSVC). However, you can compiling a Windows executable by installing the optional [Clang/LLVM ](https://docs.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170) available with Visual Studio 2019 version 16.2 and later. The code can be compiled with the command:
+
+```
+gcc -DNII2MESH -DHAVE_ZLIB nii2mesh.c MarchingCubes.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
+```
+
 ## Usage
 
 Here are the instructions for using this tool (you can also run the executable without any arguments to see this help):

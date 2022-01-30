@@ -60,11 +60,16 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 	#endif
 	if (!isGz) {
 		FILE *fp = fopen(hdrnm,"rb");
-		if (fp == NULL)
+		if (fp == NULL) {
+			printf("Unable to open %s\n", hdrnm);
 			return NULL;
+		}
 		size_t bytes_read = fread(hdr, sizeof(nifti_1_header), 1, fp);
 		fclose(fp);
-		if (bytes_read < sizeof(nifti_1_header)) return NULL;
+		if (bytes_read <= 0) {
+			printf("Unable to read %s\n", hdrnm);
+			return NULL;
+		}
 	}
 	uint16_t sig = 348;
 	uint16_t fwd = hdr->sizeof_hdr;
@@ -116,7 +121,7 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 		fseek(fp, (int)hdr->vox_offset, SEEK_SET);
 		size_t sz = fread(imgRaw, nvox*bpp, 1, fp);
 		fclose(fp);
-		if (sz < (nvox*bpp)) return NULL;
+		if (sz <= 0) return NULL;
 	}
 	if (hdr->datatype == DT_UINT8) {
 		uint8_t * img8 = (uint8_t *) imgRaw;
