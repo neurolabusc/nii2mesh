@@ -3,7 +3,11 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+
+#else
+ #include <unistd.h>
+#endif
 #include <time.h>
 #ifdef HAVE_ZLIB
 	#include <zlib.h>
@@ -13,7 +17,6 @@
 #endif
 #include "meshify.h"
 #include "base64.h" //required for GIfTI
-#include "nifti1.h"
 #include "bwlabel.h"
 #include "radixsort.h"
 #include "meshtypes.h"
@@ -259,9 +262,14 @@ void dilate(float * img, size_t dim[3], bool is26) {
 }
 
 double clockMsec() { //return milliseconds since midnight
+#ifdef _MSC_VER
+	clock_t t = clock();
+	return (double)((double)t) / (CLOCKS_PER_SEC / 1000.0);
+#else
 	struct timespec _t;
 	clock_gettime(CLOCK_MONOTONIC, &_t);
 	return _t.tv_sec*1000.0 + (_t.tv_nsec/1.0e6);
+#endif
 }
 
 long timediff(double startTimeMsec, double endTimeMsec) {
@@ -603,10 +611,19 @@ int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 
 int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz) {
 //https://github.com/neurolabusc/surf-ice/tree/master/mz3
+	#ifdef _MSC_VER
+#pragma pack(2)
+	struct mz3hdr {
+		uint16_t SIGNATURE, ATTR;
+		uint32_t NFACE, NVERT, NSKIP;
+	};
+#pragma pack()	
+	#else
 	struct __attribute__((__packed__)) mz3hdr {
 		uint16_t SIGNATURE, ATTR;
 		uint32_t NFACE, NVERT, NSKIP;
 	};
+	#endif
 	struct mz3hdr h;
 	h.SIGNATURE = 0x5A4D;
 	h.ATTR = 3;//isFACE +1 isVERT +2
@@ -700,10 +717,19 @@ int save_stl(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	//binary STL http://paulbourke.net/dataformats/stl/
 	//n.b. like other tools, ignores formal restriction that all adjacent facets must share two common vertices.
 	//n.b. does not write normal
+	#ifdef _MSC_VER
+#pragma pack(2)
+	typedef struct  {
+		vec3s norm, pts[3];
+		uint16_t spacer;
+	} tfacet;
+#pragma pack()	
+	#else
 	typedef struct  __attribute__((__packed__)) {
 		vec3s norm, pts[3];
 		uint16_t spacer;
 	} tfacet;
+	#endif
 	FILE *fp = fopen(fnm,"wb");
 	if (fp == NULL)
 		return EXIT_FAILURE;
@@ -727,10 +753,19 @@ int save_stl(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 }
 
 int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+	#ifdef _MSC_VER
+#pragma pack(1)
+	typedef struct  {
+		uint8_t n;
+		int32_t x,y,z;
+	} vec1b3i;
+#pragma pack()	
+	#else
 	typedef struct  __attribute__((__packed__)) {
 		uint8_t n;
 		int32_t x,y,z;
 	} vec1b3i;
+	#endif
 	FILE *fp = fopen(fnm,"wb");
 	if (fp == NULL)
 		return EXIT_FAILURE;

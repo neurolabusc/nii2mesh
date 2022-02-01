@@ -25,10 +25,16 @@ OLD=1 make
 
 If you have both [gcc](https://gcc.gnu.org) and [Clang LLVM](https://clang.llvm.org) compilers installed, you can use `CXX=clang` to explicitly select the Clang compiler. The environment variable `OMP=1` will compile with [OpenMP](https://www.openmp.org) which will use multiple threads to accelerate creation of atlas-based meshes. You can specify `JSON=1` to support saving meshes in [jmesh](https://github.com/OpenJData/jmesh) format. The `OLD=1` will use Cory Bloyd's classic Marching Cubes algorithm instead of Thomas Lewiner's optimized tables (the classic method is faster, but may not handle ambiguous edges as gracefully).
 
-The source code is **not** compatible with Microsoft C/C++ compiler (MSVC). However, you can compiling a Windows executable by installing the optional [Clang/LLVM ](https://docs.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170) available with Visual Studio 2019 version 16.2 and later. The code can be compiled with the command:
+For Windows, it is recommended that you can compile this project by installing the optional [Clang/LLVM ](https://docs.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170) available with Visual Studio 2019 version 16.2 and later. The code can be compiled using Clang/LLVM with the command:
 
 ```
 gcc -DNII2MESH -DHAVE_ZLIB nii2mesh.c MarchingCubes.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
+```
+
+The project has been tested with [C99](https://en.wikipedia.org/wiki/C99) compilers. The Microsoft C compiler (MSVC) only [conforms](https://docs.microsoft.com/en-us/cpp/c-language/ansi-conformance?view=msvc-170) to [C90](https://en.wikipedia.org/wiki/ANSI_C). In theory, one can compile the project (without zlib support) with the command:
+
+```
+cl -DNII2MESH nii2mesh.c MarchingCubes.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c
 ```
 
 ## Usage
@@ -214,3 +220,5 @@ MeshFix bet.ply better.ply
  - [iso2mesh](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi) provides a set of Matlab/Octave methods for mesh generation and refinement ([with more details on GitHub](https://github.com/fangq/iso2mesh)).
  - FSL [FIRST](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FIRST/UserGuide) automates tissue segmentation and can generate VTK format meshes.
  - [nii\_2\_mesh\_conversion.py](https://github.com/MahsaShk/MeshProcessing) is related to nii2mesh: it converts a binary NIfTI image to a mesh in STL format using VTK the package.
+  - [DicomToMesh](https://github.com/AOT-AG/DicomToMesh) is available for Debian-based Linux.
+ - [Online tool for NIfTI to STL conversion](http://niftyweb.cs.ucl.ac.uk/program.php?p=PRINTING).

@@ -115,7 +115,7 @@ void run(MCB *mcb)
 //-----------------------------------------------------------------------------
 {
    int p;
-   if (debug) printf("Marching Cubes begin: cpu %ld\n", clock() ) ;
+   if (debug) printf("Marching Cubes begin: cpu %f\n", (double)clock() ) ;
 
    compute_intersection_points( mcb) ;
 
@@ -144,7 +144,7 @@ void run(MCB *mcb)
    }
 
    if (debug) { 
-      printf("Marching Cubes end: cpu %ld\n", clock() ) ;
+      printf("Marching Cubes end: cpu %g\n", (double)clock() ) ;
       for( mcb->i = 0 ; mcb->i < 15 ; mcb->i++ )
       {
        printf("  %7d cases %d\n", mcb->N[mcb->i], mcb->i ) ;

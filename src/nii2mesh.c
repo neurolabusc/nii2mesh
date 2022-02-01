@@ -1,6 +1,6 @@
 // gcc -O3 -DNII2MESH -DHAVE_ZLIB -DHAVE_JSON nii2mesh.c MarchingCubes.c cJSON.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
 // clang -O1 -g -fsanitize=address -fno-omit-frame-pointer -DNII2MESH -DHAVE_ZLIB -DHAVE_JSON nii2mesh.c MarchingCubes.c cJSON.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
-
+// cl -DNII2MESH nii2mesh.c MarchingCubes.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c
 
 #include <stdio.h>
 #include <ctype.h>
@@ -8,7 +8,11 @@
 #include <stdint.h>
 #include <math.h>
 #include <string.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+
+#else 
+ #include <unistd.h>
+#endif
 #include "meshify.h"
 #include "nifti1.h"
 #include "quadric.h"
@@ -19,6 +23,32 @@
 #ifdef HAVE_ZLIB
 	#include <zlib.h>
 #endif
+#ifdef _MSC_VER
+  #define F_OK    0 
+#endif
+
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
+#if defined(__ICC) || defined(__INTEL_COMPILER)
+	#define kCCsuf  " IntelCC" STR(__INTEL_COMPILER)
+#elif defined(_MSC_VER)
+	#define kCCsuf  " MSC" STR(_MSC_VER)
+#elif defined(__clang__)
+	#define kCCsuf  " Clang" STR(__clang_major__) "." STR(__clang_minor__) "." STR(__clang_patchlevel__)
+#elif defined(__GNUC__) || defined(__GNUG__)
+    #define kCCsuf  " GCC" STR(__GNUC__) "." STR(__GNUC_MINOR__) "." STR(__GNUC_PATCHLEVEL__)
+#else
+	#define kCCsuf " CompilerNA" //unknown compiler!
+#endif
+#if defined(__arm__) || defined(__ARM_ARCH)
+    #define kCPUsuf " ARM"
+#elif defined(__x86_64)
+    #define kCPUsuf " x86-64"
+#else
+    #define kCPUsuf " " //unknown CPU
+#endif
+#define kdate "v1.0.20211220"
 
 float * load_nii(const char *fnm, nifti_1_header * hdr) {
 	char imgnm[768], hdrnm[768], basenm[768], ext[768] = "";
@@ -196,6 +226,7 @@ int main(int argc,char **argv) {
 	char atlasFilename[mxStr] = "";
 	// Check the command line, minimal is name of input and output files
 	if (argc < 3) {
+		printf("nii2mesh %s %s %s\n", kdate, kCCsuf, kCPUsuf);
 		printf("Converts a NIfTI voxelwise volume to triangulated mesh.\n");
 		printf("Usage: %s inputNIfTI [options] outputMesh\n",argv[0]);
 		printf("Options\n");
@@ -229,7 +260,6 @@ int main(int argc,char **argv) {
 		for (int i=2;i<(argc-1);i++) {
 			if (strcmp(argv[i],"-a") == 0)
 				strcpy(atlasFilename, argv[i+1]);
-				//isAtlas = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-b") == 0)
 				fillBubbles = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-i") == 0) {
@@ -283,9 +313,14 @@ int main(int argc,char **argv) {
 		char basenm[mxStr], ext[mxStr] = "";
 		//look for text file, e.g. atlas.nii.gz -> atlas.txt
 		#define kLabelStrLen 32
-		char atlasLabels[nLabel+1][kLabelStrLen];
+		typedef struct  {
+			char str[kLabelStrLen];
+		} tstr;
+		tstr *atlasLabels = (tstr *) malloc((nLabel+1) * sizeof(tstr));
+		//We need to use a struct to support MSVC C90, with gcc and clang:
+		//  char atlasLabels[nLabel+1][kLabelStrLen];
 		for (int i = 0; i <= nLabel; i++)
-			snprintf (atlasLabels[i], kLabelStrLen-1, "%d", i);
+			snprintf (atlasLabels[i].str, kLabelStrLen-1, "%d", i);
 		if (strcmp("1", atlasFilename) != 0) {
 			FILE *fp = fopen(atlasFilename,"rt");
 			if (fp == NULL) {
@@ -297,13 +332,13 @@ int main(int argc,char **argv) {
 					int i = atoi(s);
 					if ((i < 0) || (i > nLabel)) continue;
 					strncpy(s, strtok(NULL,";"), mxStr);
-					int len = snprintf (atlasLabels[i], kLabelStrLen-1, "%s.k%d", s, i);
+					int len = snprintf (atlasLabels[i].str, kLabelStrLen-1, "%s.k%d", s, i);
 					if (len < 0) exit(EXIT_FAILURE);
 					//remove illegal characters, e.g. 'PACo/Pir' -> 'PACo-Pir'
 					if (len < 1) continue;
 					for (int j = 0; j < len; j++)
-						if ((atlasLabels[i][j] < 1) || (atlasLabels[i][j] == ' ') || (atlasLabels[i][j] == ',') || (atlasLabels[i][j] == '/') || (atlasLabels[i][j] == '\\') || (atlasLabels[i][j] == '%') || (atlasLabels[i][j] == '*') || (atlasLabels[i][j] == 9) || (atlasLabels[i][j] == 10) || (atlasLabels[i][j] == 11) || (atlasLabels[i][j] == 13))
-							atlasLabels[i][j] = '-';
+						if ((atlasLabels[i].str[j] < 1) || (atlasLabels[i].str[j] == ' ') || (atlasLabels[i].str[j] == ',') || (atlasLabels[i].str[j] == '/') || (atlasLabels[i].str[j] == '\\') || (atlasLabels[i].str[j] == '%') || (atlasLabels[i].str[j] == '*') || (atlasLabels[i].str[j] == 9) || (atlasLabels[i].str[j] == 10) || (atlasLabels[i].str[j] == 11) || (atlasLabels[i].str[j] == 13))
+							atlasLabels[i].str[j] = '-';
 				}
 				fclose(fp);
 			}
@@ -342,7 +377,7 @@ int main(int argc,char **argv) {
 					continue;
 				}
 				char outnm[mxStr];
-				if (snprintf(outnm,sizeof(outnm),"%s%s%s", basenm, atlasLabels[i], ext) < 0) exit(EXIT_FAILURE);
+				if (snprintf(outnm,sizeof(outnm),"%s%s%s", basenm, atlasLabels[i].str, ext) < 0) exit(EXIT_FAILURE);
 				int reti = nii2(hdr, imgbinary, originalMC, 0.5, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, outnm, quality);
 				if (reti == EXIT_SUCCESS)
 					partial_OK ++;
@@ -352,7 +387,8 @@ int main(int argc,char **argv) {
 			{
 				nOK += partial_OK;
 			}
-		}	
+		}
+		free(atlasLabels);
 		printf("Converted %d regions of interest\n", nOK);
 		if (nOK == 0)
 			ret = EXIT_FAILURE;

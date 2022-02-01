@@ -143,6 +143,7 @@ static int nii_otsu(int* H, int nBin, int mode, int *dark, int *mid, int *bright
 //nBin: number of bins in histogram, e.g. 256 for H[0..255]
 //mode: segment and levels 1: 3/4, 2: 2/3 3: 1/2, 4: 1/3, 5: 1/4
 //dark/bright/high: set to threshold
+	int thresh = 0;
 	*dark = 0;
 	*mid = 0;
 	*bright = 0;
@@ -151,46 +152,39 @@ static int nii_otsu(int* H, int nBin, int mode, int *dark, int *mid, int *bright
 		Sum = Sum + H[v];
 	if (Sum <= 0)
 		return 0;
-	#ifdef _MSC_VER
-	#define kBin 2048
-	if (nBin > kBin) return 0;
-	double P[kBin][kBin];
-	double S[kBin][kBin];
-	#else
-	double P[nBin][nBin], S[nBin][nBin];
-	#endif
-	P[0][0] = H[0];
-	S[0][0] = H[0];
+	double *P = (double*) malloc(nBin * nBin * sizeof(double));
+	double *S = (double*) malloc(nBin * nBin * sizeof(double));
+	P[0] = H[0];
+	S[0] = H[0];
 	for (int v = 1; v < nBin; v++) {
 		double Prob = H[v]/Sum;
-		P[0][v] = P[0][v-1]+Prob;
-		S[0][v] = S[0][v-1]+(v+1)*Prob;
+		P[v] = P[v-1]+Prob;
+		S[v] = S[v-1]+(v+1)*Prob;
 	}
 	for (int u = 1; u < nBin; u++) {
 		for (int v = u; v < nBin; v++) {
-			P[u][v] = P[0][v]-P[0][u-1];
-			S[u][v] = S[0][v]-S[0][u-1];
+			P[(u*nBin)+v] = P[v]-P[u-1];
+			S[(u*nBin)+v] = S[v]-S[u-1];
 		}
 	}
 	//result is eq 29 from Liao
 	for (int u = 0; u < nBin; u++) {
 		for (int v = u; v < nBin; v++) {
-			if (P[u][v] != 0) //avoid divide by zero errors...
-				P[u][v] = (S[u][v]*S[u][v]) / P[u][v];
+			if (P[(u*nBin)+v] != 0) //avoid divide by zero errors...
+				P[(u*nBin)+v] = (S[(u*nBin)+v]*S[(u*nBin)+v]) / P[(u*nBin)+v];
 		}
 	}
-	int thresh = 0;
 	if ((mode == 1) || (mode == 5)) {
 		int lo = (int)(0.25*nBin);
 		int mi = (int)(0.50*nBin);
 		int hi = (int)(0.75*nBin);
 		//double max = P[0][lo] + P[lo+1][hi] + P[hi+1][nBin-1];
-		double max = P[0][lo] + P[lo+1][mi] + P[mi+1][hi] + P[hi+1][255];
+		double max = P[lo] + P[((lo+1)*nBin)+mi] + P[((mi+1)*nBin)+hi] + P[((hi+1)*nBin)+255];
 		for (int l = 0; l < (nBin-3); l++) {
 			for (int m = l + 1; m < (nBin-2); m++) {
 				for (int h = m + 1; h < (nBin-1); h++) {
 					//double v = P[0][l]+P[l+1][h]+P[h+1][nBin-1];
-					double v = P[0][l] + P[l+1][m] + P[m+1][h] + P[h+1][255];
+					double v = P[l] + P[((l+1)*nBin)+m] + P[((m+1)*nBin)+h] + P[((h+1)*nBin)+255];
 					if (v > max) {
 						lo = l;
 						mi = m;
@@ -200,7 +194,6 @@ static int nii_otsu(int* H, int nBin, int mode, int *dark, int *mid, int *bright
 				}//for h -> hi
 			} //for m -> mi
 		} //for l -> low
-		//printf(">>>>%d %d %d\n", lo, mi, hi);
 		if (mode == 1)
 			thresh = hi;
 		else
@@ -211,10 +204,10 @@ static int nii_otsu(int* H, int nBin, int mode, int *dark, int *mid, int *bright
 	} else if ((mode == 2) || (mode == 4)) {
 		int lo = (int)(0.33*nBin);
 		int hi = (int)(0.67*nBin);
-		double max = P[0][lo] + P[lo+1][hi] + P[hi+1][nBin-1];
+		double max = P[lo] + P[((lo+1)*nBin)+hi] + P[((hi+1)*nBin)+nBin-1];
 		for (int l = 0; l < (nBin-2); l++) {
 			for (int h = l + 1; h < (nBin-1); h++) {
-				double v = P[0][l]+P[l+1][h]+P[h+1][nBin-1];
+				double v = P[l]+P[((l+1)*nBin)+h]+P[((h+1)*nBin)+nBin-1];
 				if (v > max) {
 					lo = l;
 					hi = h;
@@ -231,10 +224,10 @@ static int nii_otsu(int* H, int nBin, int mode, int *dark, int *mid, int *bright
 		*bright = hi;
 	} else { //two levels:
 		thresh = (int)(0.25*nBin); //nBin / 2;
-		double max = P[0][thresh]+P[thresh+1][nBin-1];
+		double max = P[thresh]+P[((thresh+1)*nBin)+nBin-1];
 		//exhaustively search
 		for (int i = 0; i < (nBin-1); i++) {
-			double v = P[0][i]+P[i+1][nBin-1];
+			double v = P[i]+P[((i+1)*nBin)+nBin-1];
 			if (v > max) {
 				thresh = i;
 				max = v;
@@ -244,6 +237,8 @@ static int nii_otsu(int* H, int nBin, int mode, int *dark, int *mid, int *bright
 		*mid = thresh;
 		*bright = thresh;
 	}
+	free(P);
+	free(S);
 	return thresh;
 }
 
@@ -254,7 +249,7 @@ float setThreshold(float*img, int nvox, int darkMediumBright123) {
 	#define kOtsuBins 256
 	float scl = (kOtsuBins - 1) / (mx - mn);
 	//create histogram
-	int hist[kOtsuBins];
+	int *hist = (int*) malloc(kOtsuBins * sizeof(int));
 	for (int i = 0; i < kOtsuBins; i++)
 		hist[i] = 0;
 	for (int i = 0; i < nvox; i++) {
@@ -269,6 +264,7 @@ float setThreshold(float*img, int nvox, int darkMediumBright123) {
 	if ((darkMediumBright123 == 1) || (darkMediumBright123 == 3)) {
 		//mode 5: Otsu multi-level segment to 4 intensities with 3 boundaries
 		nii_otsu(hist, kOtsuBins, 5, &dark, &mid, &bright);
+		free(hist);
 		if (darkMediumBright123 == 1)
 			return (dark / scl) + mn;
 		if (darkMediumBright123 == 3)
@@ -276,5 +272,6 @@ float setThreshold(float*img, int nvox, int darkMediumBright123) {
 	}
 	//mode 3: classic Otsu binary threshold segment to 2 intensities with 1 boundary
 	nii_otsu(hist, kOtsuBins, 3, &dark, &mid, &bright);
+	free(hist);
 	return (mid / scl) + mn;
 }

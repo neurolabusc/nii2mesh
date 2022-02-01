@@ -4,7 +4,11 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+
+#else 
+ #include <unistd.h>
+#endif
 #include <stdint.h>
 
 #define printfx(...) fprintf(stderr, __VA_ARGS__)

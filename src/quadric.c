@@ -17,7 +17,11 @@
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+
+#else
+ #include <unistd.h>
+#endif
 #include <time.h>
 #include "meshtypes.h"
 #include "quadric.h"
