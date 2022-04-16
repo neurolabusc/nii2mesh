@@ -400,6 +400,25 @@ void swap_4bytes( size_t n , void *ar ) { // 4 bytes at a time
 	return ;
 }
 
+void swap_8bytes( size_t n , void *ar )    // 8 bytes at a time
+{
+    size_t ii ;
+    unsigned char * cp0 = (unsigned char *)ar, * cp1, * cp2 ;
+    unsigned char tval ;
+    for( ii=0 ; ii < n ; ii++ ){
+        cp1 = cp0; cp2 = cp0+7;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp1++;  cp2--;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp1++;  cp2--;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp1++;  cp2--;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp0 += 8;
+    }
+    return ;
+}
+
 typedef struct {
 	float x,y,z;
 } vec3s; //single precision (float32)
@@ -618,48 +637,74 @@ void write_ubjsonint(int len, int *dat, FILE *fp){
 	fwrite(dat,len,4,fp);
 }
 
-int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+void write_ubjsonfloat(int len, float *dat, FILE *fp){
+	if (!&littleEndianPlatform)
+		swap_4bytes(len, dat);
+	fwrite(dat,len,4,fp);
+}
+
+void write_ubjsondouble(int len, double *dat, FILE *fp){
+	if (!&littleEndianPlatform)
+		swap_8bytes(len, dat);
+	fwrite(dat,len,8,fp);
+}
+
+int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz, bool isdouble){
 	int markerlen=0;
 	const char *output[]={
 	"{",
 		"N","","_DataInfo_","{",
 			"N","","JMeshVersion","S","","0.5",
-			"N","","Comment","S","","Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)",
+			"N","","Comment","S","","Created by nii2mesh with NeuroJSON Binay JMesh format (http://neurojson.org)",
 			"N","","AnnotationFormat","S","","https://github.com/NeuroJSON/jmesh/blob/master/JMesh_specification.md",
-			"N","","SerialFormat","S","","http://json.org",
-                        "N","","Parser","{",
-                                "N","","Python","[",
-                                        "S","","https://pypi.org/project/jdata",
-                                        "S","","https://pypi.org/project/bjdata",
-                                "]",
+			"N","","SerialFormat","S","","http://neurojson.org/bjdata/draft2",
+			"N","","Parser","{",
+				"N","","Python","[",
+					"S","","https://pypi.org/project/jdata",
+					"S","","https://pypi.org/project/bjdata",
+				"]",
 				"N","","MATLAB","S","","https://github.com/NeuroJSON/jsonlab",
-                                "N","","JavaScript","[",
-                                        "S","","https://www.npmjs.com/package/jda",
-                                        "S","","https://www.npmjs.com/package/bjd",
-                                "]",
+				"N","","JavaScript","[",
+					"S","","https://www.npmjs.com/package/jda",
+					"S","","https://www.npmjs.com/package/bjd",
+				"]",
 				"N","","CPP","S","","https://github.com/NeuroJSON/json",
-                                "N","","C","[",
-                                        "S","","https://github.com/DaveGamble/cJSON",
-                                        "S","","https://github.com/NeuroJSON/ubj",
-                                "]",
-                        "}",
+				"N","","C","[",
+					"S","","https://github.com/DaveGamble/cJSON",
+					"S","","https://github.com/NeuroJSON/ubj",
+				"]",
+			"}",
 		"}",
-		"N","","MeshVertex3","{",
-			"N","","_ArrayType_","S","","double",
-			"N","","_ArraySize_","[$l#","?1","?2",
+		"N","","MeshVertex3","?1",
+			"N","","_ArrayType_","S","",(isdouble)?"double":"single",
+			"N","","_ArraySize_","[$l#U\x2","?2",
 			"N","","_ArrayZipType_","S","","zlib",
-			"N","","_ArrayZipSize_","[$l#","?3","?4",
-			"N","","_ArrayZipData_","S","","?5",
+			"N","","_ArrayZipSize_","[$l#U\x1","?3",
+			"N","","_ArrayZipData_","S","","?4",
 		"}",
 		"N","","MeshTri3","{",
 			"N","","_ArrayType_","S","","uint32",
-			"N","","_ArraySize_","[$l#","?6","?7",
+			"N","","_ArraySize_","[$l#U\x2","?5",
 			"N","","_ArrayZipType_","S","","zlib",
-			"N","","_ArrayZipSize_","[$l#","?8","?9",
-			"N","","_ArrayZipData_","S","","?10",
+			"N","","_ArrayZipSize_","[$l#U\x1","?6",
+			"N","","_ArrayZipData_","S","","?7",
 		"}",
 	"}"
 	};
+
+	float *floatpts=NULL;
+	if(!isdouble){
+		floatpts=(float *)calloc(npt*3, sizeof(float));
+		for(int i=0; i<npt; i++){
+			floatpts[i*3]=pts[i].x;
+			floatpts[i*3+1]=pts[i].y;
+			floatpts[i*3+2]=pts[i].z;
+		}
+	}
+	unsigned int *newtris=(unsigned int *)malloc(ntri*3*sizeof(unsigned int));
+	memcpy(newtris,&(tris[0].x),ntri*3*sizeof(unsigned int));
+	for(int i=0;i<ntri*3;i++)
+		newtris[i]++;
 
 	FILE *fp = fopen(fnm,"wb");
 	if (fp == NULL)
@@ -692,20 +737,39 @@ int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 					int dim[2]={0,3}, len[2]={1,0};
 					int ret=0, status=0;
 					switch(slotid){
-						case 1: {unsigned char val=2;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
+						case 1: {
+							if(isGz){
+								fputc('{',fp);
+							}else{ // write node and face data in BJData strongly-typed ND array construct
+								int val[2]={0};
+								val[0]=npt;
+								val[1]=3;
+
+								fwrite("[$", 1, 2, fp);
+								fputc(isdouble ? 'D' : 'd', fp);
+								fwrite("#[$l#U\x02", 1, 7, fp);
+								write_ubjsonint(2,val,fp);
+								if(isdouble)
+									write_ubjsondouble(npt*3, &(pts[0].x), fp);
+								else
+									write_ubjsonfloat(npt*3, floatpts, fp);
+
+								val[0]=ntri;
+								fwrite("U\x08MeshTri3[$l#[$l#U\x02", 1, 20, fp);
+								write_ubjsonint(2, val, fp);
+								write_ubjsonint(ntri*3, newtris, fp);
+								fputc('}', fp);
+							}
+							break;
+						}
 						case 2: {int val[2]; val[0]=npt; val[1]=3; write_ubjsonint(2,val,fp);break;}
-						case 3: {unsigned char val=1;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
-						case 4: {int val=npt*3;		 write_ubjsonint(1,&val,fp);break;}
-						case 6: {unsigned char val=2;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
-						case 7: {int val[2]; val[0]=ntri;val[1]=3; write_ubjsonint(2,val,fp);break;}
-						case 8: {unsigned char val=1;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
-						case 9: {int val=ntri*3;	 write_ubjsonint(1,&val,fp);break;}
-						case 5:
+						case 3: {int val=npt*3;	write_ubjsonint(1,&val,fp);break;}
+						case 4:
 							dim[0]=npt;
 							len[1]=dim[0]*dim[1];
 
-							totalbytes=dim[0]*dim[1]*sizeof(pts[0].x);
-							ret=zmat_run(totalbytes, (unsigned char *)&(pts[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+							totalbytes=dim[0]*dim[1]*(isdouble? sizeof(pts[0].x) : sizeof(float));
+							ret=zmat_run(totalbytes, (isdouble ? (unsigned char *)&(pts[0].x) : (unsigned char *)floatpts) , &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
 							if(!ret){
 								int clen=compressedbytes;
 								fputc('l',fp);
@@ -715,17 +779,12 @@ int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 							if(compressed)
 								free(compressed);
 							break;
-						case 10:
+						case 5: {int val[2]; val[0]=ntri;val[1]=3; write_ubjsonint(2,val,fp);break;}
+						case 6: {int val=ntri*3; write_ubjsonint(1,&val,fp);break;}
+						case 7:
 							dim[0]=ntri;
-							len[1]=dim[0]*dim[1];
-
 							totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
-							unsigned int *val=(unsigned int *)malloc(totalbytes);
-							memcpy(val,&(tris[0].x),totalbytes);
-							for(int i=0;i<len[1];i++)
-								val[i]++;
-							ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
-							free(val);
+							ret=zmat_run(totalbytes, (unsigned char *)newtris, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
 							if(!ret){
 								int clen=compressedbytes;
 								fputc('l',fp);
@@ -737,24 +796,36 @@ int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 								free(compressed);
 							break;
 					}
+					if(slotid==1 && !isGz)
+						break;
 				}
 			}
 		}
 	}
 	fclose(fp);
+
+	free(newtris);
+	if(floatpts)
+		free(floatpts);
+
 	return EXIT_SUCCESS;
 }
 #endif //HAVE_ZLIB
 
-int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isdouble){
 	FILE *fp = fopen(fnm,"w");
 	if (fp == NULL)
 		return EXIT_FAILURE;
 	fprintf(fp,"{\n");
 	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)\"\n\t},\n");
 	fprintf(fp,"\t\"MeshVertex3\":[\n");
-	for (int i=0;i<npt;i++)
-		fprintf(fp, "[%g,\t%g,\t%g],\n", pts[i].x, pts[i].y,pts[i].z);
+        if(isdouble){
+                for (int i=0;i<npt;i++)
+                        fprintf(fp, "[%.16g,\t%.16g,\t%.16g],\n", pts[i].x, pts[i].y,pts[i].z);
+        }else{
+                for (int i=0;i<npt;i++)
+                        fprintf(fp, "[%.7g,\t%.7g,\t%.7g],\n", pts[i].x, pts[i].y,pts[i].z);
+        }
 	fprintf(fp,"\t],\n\t\"MeshTri3\":[\n");
 	for (int i=0;i<ntri;i++)
 		fprintf(fp, "[%d,\t%d,\t%d],\n", tris[i].x+1, tris[i].y+1, tris[i].z+1);
@@ -1124,7 +1195,7 @@ void strip_ext(char *fname){
 	}
 }
 
-int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz){
+int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz, bool isdouble){
 	char basenm[768], ext[768] = "";
 	strcpy(basenm, fnm);
 	strip_ext(basenm); // ~/file.nii -> ~/file
@@ -1137,13 +1208,13 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 #ifdef HAVE_ZLIB
 #ifdef HAVE_JSON
 	else if (strstr(ext, ".jmsh"))
-		return save_jmsh(fnm, tris, pts, ntri, npt);
+		return save_jmsh(fnm, tris, pts, ntri, npt, isdouble);
 #endif //HAVE_JSON
 	else if (strstr(ext, ".bmsh"))
-		return save_bmsh(fnm, tris, pts, ntri, npt);
+		return save_bmsh(fnm, tris, pts, ntri, npt, isGz, isdouble);
 #endif //HAVE_ZLIB
 	else if (strstr(ext, ".json"))
-		return save_json(fnm, tris, pts, ntri, npt);
+		return save_json(fnm, tris, pts, ntri, npt, isdouble);
 	else if (strstr(ext, ".mz3"))
 		return save_mz3(fnm, tris, pts, ntri, npt, isGz);
 	else if (strstr(ext, ".off"))
