@@ -449,7 +449,6 @@ int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 }
 
 #ifdef HAVE_ZLIB
-#ifdef HAVE_JSON
 
 enum TZipMethod {zmZlib, zmGzip, zmBase64, zmLzip, zmLzma, zmLz4, zmLz4hc};
 
@@ -520,18 +519,34 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 	return 0;
 }
 
+#ifdef HAVE_JSON
+
 int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	FILE *fp;
-	cJSON *root=NULL, *hdr=NULL, *node=NULL, *face=NULL;
+	cJSON *root=NULL, *hdr=NULL, *node=NULL, *face=NULL, *parser=NULL;
+	const char *pyparsers[]={"https://pypi.org/project/jdata","https://pypi.org/project/bjdata"};
+	const char *jsparsers[]={"https://www.npmjs.com/package/jda","https://www.npmjs.com/package/bjd"};
+	const char *cparsers[]={"https://github.com/DaveGamble/cJSON","https://github.com/NeuroJSON/ubj"};
 	char *jsonstr=NULL;
 	int dim[2]={0,3}, len[2]={1,0};
 	size_t compressedbytes, totalbytes;
 	unsigned char *compressed=NULL, *buf=NULL;
 	int ret=0, status=0;
+
 	root=cJSON_CreateObject();
+
 	cJSON_AddItemToObject(root,  "_DataInfo_", hdr = cJSON_CreateObject());
 	cJSON_AddStringToObject(hdr, "JMeshVersion", "0.5");
-	cJSON_AddStringToObject(hdr, "Comment", "Created by nii2mesh");
+	cJSON_AddStringToObject(hdr, "Comment", "Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)");
+	cJSON_AddStringToObject(hdr, "AnnotationFormat", "https://github.com/NeuroJSON/jmesh/blob/master/JMesh_specification.md");
+	cJSON_AddStringToObject(hdr, "SerialFormat", "http://json.org");
+	cJSON_AddItemToObject(hdr,  "Parser", parser = cJSON_CreateObject());
+	cJSON_AddStringToObject(parser, "Python", tmp = cJSON_CreateStringArray(pyparsers,2));
+	cJSON_AddStringToObject(parser, "MATLAB", "https://github.com/NeuroJSON/jsonlab");
+	cJSON_AddStringToObject(parser, "JavaScript", tmp = jsparsers(pyparsers,2));
+	cJSON_AddStringToObject(parser, "CPP", "https://github.com/NeuroJSON/json");
+	cJSON_AddStringToObject(parser, "C", tmp = cJSON_CreateStringArray(cparsers,2));
+
 	cJSON_AddItemToObject(root,  "MeshVertex3", node = cJSON_CreateObject());
 	cJSON_AddStringToObject(node,"_ArrayType_","double");
 	dim[0]=npt;
@@ -539,13 +554,9 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	cJSON_AddStringToObject(node,"_ArrayZipType_","zlib");
 	len[1]=dim[0]*dim[1];
 	cJSON_AddItemToObject(node,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
+
 	totalbytes=dim[0]*dim[1]*sizeof(pts[0].x);
-	unsigned int *val=(unsigned int *)malloc(totalbytes);
- 	memcpy(val,&(tris[0].x),totalbytes);
- 	for(int i=0;i<len[1];i++)
- 		val[i]++;
- 	ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
- 	free(val);
+	ret=zmat_run(totalbytes, (unsigned char *)&(pts[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
 	if(!ret){
 		 ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
 		 cJSON_AddStringToObject(node,  "_ArrayZipData_",(char *)buf);
@@ -565,8 +576,14 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	cJSON_AddStringToObject(face,"_ArrayZipType_","zlib");
 	len[1]=dim[0]*dim[1];
 	cJSON_AddItemToObject(face,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
+
 	totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
-	ret=zmat_run(totalbytes, (unsigned char *)&(tris[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	unsigned int *val=(unsigned int *)malloc(totalbytes);
+	memcpy(val,&(tris[0].x),totalbytes);
+	for(int i=0;i<len[1];i++)
+		val[i]++;
+	ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	free(val);
 	if(!ret){
 		ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
 		cJSON_AddStringToObject(face,  "_ArrayZipData_",(char *)buf);
@@ -575,14 +592,17 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 		free(compressed);
 	if(buf)
 		free(buf);
+
 	jsonstr=cJSON_Print(root);
 	if(jsonstr==NULL)
 		return EXIT_FAILURE;
+
 	fp=fopen(fnm,"wt");
 	if(fp==NULL)
 		return EXIT_FAILURE;
 	fprintf(fp,"%s\n",jsonstr);
 	fclose(fp);
+
 	if(jsonstr)
 		free(jsonstr);
 	if(root)
@@ -590,6 +610,140 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	return EXIT_SUCCESS;
 }
 #endif //HAVE_JSON
+
+
+void write_ubjsonint(int len, int *dat, FILE *fp){
+	if (!&littleEndianPlatform)
+		swap_4bytes(len, dat);
+	fwrite(dat,len,4,fp);
+}
+
+int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+	int markerlen=0;
+	const char *output[]={
+	"{",
+		"N","","_DataInfo_","{",
+			"N","","JMeshVersion","S","","0.5",
+			"N","","Comment","S","","Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)",
+			"N","","AnnotationFormat","S","","https://github.com/NeuroJSON/jmesh/blob/master/JMesh_specification.md",
+			"N","","SerialFormat","S","","http://json.org",
+                        "N","","Parser","{",
+                                "N","","Python","[",
+                                        "S","","https://pypi.org/project/jdata",
+                                        "S","","https://pypi.org/project/bjdata",
+                                "]",
+				"N","","MATLAB","S","","https://github.com/NeuroJSON/jsonlab",
+                                "N","","JavaScript","[",
+                                        "S","","https://www.npmjs.com/package/jda",
+                                        "S","","https://www.npmjs.com/package/bjd",
+                                "]",
+				"N","","CPP","S","","https://github.com/NeuroJSON/json",
+                                "N","","C","[",
+                                        "S","","https://github.com/DaveGamble/cJSON",
+                                        "S","","https://github.com/NeuroJSON/ubj",
+                                "]",
+                        "}",
+		"}",
+		"N","","MeshVertex3","{",
+			"N","","_ArrayType_","S","","double",
+			"N","","_ArraySize_","[$l#","?1","?2",
+			"N","","_ArrayZipType_","S","","zlib",
+			"N","","_ArrayZipSize_","[$l#","?3","?4",
+			"N","","_ArrayZipData_","S","","?5",
+		"}",
+		"N","","MeshTri3","{",
+			"N","","_ArrayType_","S","","uint32",
+			"N","","_ArraySize_","[$l#","?6","?7",
+			"N","","_ArrayZipType_","S","","zlib",
+			"N","","_ArrayZipSize_","[$l#","?8","?9",
+			"N","","_ArrayZipData_","S","","?10",
+		"}",
+	"}"
+	};
+
+	FILE *fp = fopen(fnm,"wb");
+	if (fp == NULL)
+		return EXIT_FAILURE;
+
+	markerlen=sizeof(output)/sizeof(char*);
+
+	for(int i=0;i<markerlen;i++){
+		int slen=strlen(output[i]);
+		if(slen>0 && output[i][0]!='?'){
+			if(!(slen==1 && output[i][0]=='N'))
+				fwrite(output[i],1,slen,fp);
+			if(slen==1 && (output[i][0]=='N' || output[i][0]=='S') && i+2<markerlen && output[i+1][0]=='\0' && output[i+2][0]!='?'){
+				unsigned int keylen=strlen(output[i+2]);
+				if(keylen<256){
+					unsigned char keylenbyte=keylen;
+					fputc('U',fp);
+					fwrite(&keylenbyte,1,sizeof(keylenbyte),fp);
+				}else{
+					fputc('l',fp);
+					write_ubjsonint(1,&keylen,fp);
+				}
+			}
+		}else{
+			if(slen>0){
+				int slotid=0;
+				if(sscanf(output[i],"\?%d",&slotid)==1 && slotid>0){
+					unsigned char *compressed=NULL;
+					size_t compressedbytes, totalbytes;
+					int dim[2]={0,3}, len[2]={1,0};
+					int ret=0, status=0;
+					switch(slotid){
+						case 1: {unsigned char val=2;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
+						case 2: {int val[2]; val[0]=npt; val[1]=3; write_ubjsonint(2,val,fp);break;}
+						case 3: {unsigned char val=1;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
+						case 4: {int val=npt*3;		 write_ubjsonint(1,&val,fp);break;}
+						case 6: {unsigned char val=2;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
+						case 7: {int val[2]; val[0]=ntri;val[1]=3; write_ubjsonint(2,val,fp);break;}
+						case 8: {unsigned char val=1;    fputc('U',fp);fwrite(&val,1,sizeof(val),fp);break;}
+						case 9: {int val=ntri*3;	 write_ubjsonint(1,&val,fp);break;}
+						case 5:
+							dim[0]=npt;
+							len[1]=dim[0]*dim[1];
+
+							totalbytes=dim[0]*dim[1]*sizeof(pts[0].x);
+							ret=zmat_run(totalbytes, (unsigned char *)&(pts[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+							if(!ret){
+								int clen=compressedbytes;
+								fputc('l',fp);
+								write_ubjsonint(1,&clen,fp);
+								fwrite(compressed,1,compressedbytes,fp);
+							}
+							if(compressed)
+								free(compressed);
+							break;
+						case 10:
+							dim[0]=ntri;
+							len[1]=dim[0]*dim[1];
+
+							totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
+							unsigned int *val=(unsigned int *)malloc(totalbytes);
+							memcpy(val,&(tris[0].x),totalbytes);
+							for(int i=0;i<len[1];i++)
+								val[i]++;
+							ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+							free(val);
+							if(!ret){
+								int clen=compressedbytes;
+								fputc('l',fp);
+								write_ubjsonint(1,&clen,fp);
+								fwrite(compressed,1,compressedbytes,fp);
+							}
+
+							if(compressed)
+								free(compressed);
+							break;
+					}
+				}
+			}
+		}
+	}
+	fclose(fp);
+	return EXIT_SUCCESS;
+}
 #endif //HAVE_ZLIB
 
 int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
@@ -597,7 +751,7 @@ int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	if (fp == NULL)
 		return EXIT_FAILURE;
 	fprintf(fp,"{\n");
-	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh\"\n\t},\n");
+	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)\"\n\t},\n");
 	fprintf(fp,"\t\"MeshVertex3\":[\n");
 	for (int i=0;i<npt;i++)
 		fprintf(fp, "[%g,\t%g,\t%g],\n", pts[i].x, pts[i].y,pts[i].z);
@@ -985,6 +1139,8 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	else if (strstr(ext, ".jmsh"))
 		return save_jmsh(fnm, tris, pts, ntri, npt);
 #endif //HAVE_JSON
+	else if (strstr(ext, ".bmsh"))
+		return save_bmsh(fnm, tris, pts, ntri, npt);
 #endif //HAVE_ZLIB
 	else if (strstr(ext, ".json"))
 		return save_json(fnm, tris, pts, ntri, npt);
