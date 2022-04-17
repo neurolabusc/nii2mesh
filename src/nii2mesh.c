@@ -293,7 +293,13 @@ int main(int argc,char **argv) {
 	}
 	nifti_1_header hdr;
 	double startTime = clockMsec();
-	float * img = load_nii(argv[1], &hdr);
+	float * img=NULL;
+#ifdef HAVE_JSON
+        if(strstr(argv[1], ".jnii") - argv[1] == strlen(argv[1])-5)
+                img = load_jnii(argv[1], &hdr);
+        else
+#endif
+                img = load_nii(argv[1], &hdr);
 	if (verbose)
 		printf("load from disk: %ld ms\n", timediff(startTime, clockMsec()));
 	if (img == NULL)

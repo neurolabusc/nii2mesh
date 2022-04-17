@@ -11,6 +11,11 @@
 #include <time.h>
 #ifdef HAVE_ZLIB
 	#include <zlib.h>
+	#ifdef HAVE_JSON
+		#include "cJSON.h"
+		#define FIND_JSON_KEY(id,parent,fallback,val) \
+			((tmp=cJSON_GetObjectItem(root,id))==0 ? fallback : tmp->val)
+	#endif
 #endif
 #include "meshify.h"
 #include "base64.h" //required for GIfTI
@@ -482,10 +487,15 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 		if(zipid==zmBase64){
 			/** base64 encoding  */
 			*outputbuf=base64_encode((const unsigned char*)inputstr, inputsize, outputsize);
-		}else if(zipid==zmZlib){
+		}else if(zipid==zmZlib || zipid==zmGzip){
 			/** zlib (.zip) or gzip (.gz) compression  */
-			if(deflateInit(&zs,  (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress)) != Z_OK)
-				return -2;
+			if(zipid==zmZlib){
+				if(deflateInit(&zs,  (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress)) != Z_OK)
+					return -2;
+			}else{
+				if(deflateInit2(&zs, (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress), Z_DEFLATED, 15|16, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) != Z_OK)
+					return -2;
+			}
 			buflen[0] =deflateBound(&zs,inputsize);
 			*outputbuf=(unsigned char *)malloc(buflen[0]);
 			zs.avail_in = inputsize; /* size of input, string + terminator*/
@@ -505,12 +515,16 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 		if(zipid==zmBase64){
 			/** base64 decoding  */
 			*outputbuf=base64_decode((const unsigned char*)inputstr, inputsize, outputsize);
-		}else if(zipid==zmZlib){
+		}else if(zipid==zmZlib || zipid==zmGzip){
 			/** zlib (.zip) or gzip (.gz) decompression */
 			int count=1;
-			if(zipid==zmZlib)
+			if(zipid==zmZlib){
 				if(inflateInit(&zs) != Z_OK)
 					return -2;
+			}else{
+				if(inflateInit2(&zs, 15|32) != Z_OK)
+					return -2;
+			}
 			buflen[0] =inputsize*20;
 			*outputbuf=(unsigned char *)malloc(buflen[0]);
 			zs.avail_in = inputsize; /* size of input, string + terminator*/
@@ -534,6 +548,197 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 	}
 	return 0;
 }
+
+#ifdef HAVE_JSON
+
+const char *zipformat[]={"zlib","gzip","base64","lzip","lzma","lz4","lz4hc",""};
+
+int key_lookup(char *origkey, const char *table[]){
+	int i=0;
+	while(table[i] && table[i][0]!='\0'){
+		if(strcmp(origkey,table[i])==0)
+			return i;
+		i++;
+	}
+	return -1;
+}
+
+// decoding JData ND array construct {"_ArraySize_":,"_ArrayType_":"_ArrayZipType_":"_ArrayZipSize_":"_ArrayZipData_":}
+
+int  jdata_decode(void **vol, unsigned short *ndim, unsigned short *dims, int maxdim, char **type, cJSON *obj){
+	int ret=0;
+	cJSON * ztype=NULL;
+	cJSON * vsize=cJSON_GetObjectItem(obj,"_ArraySize_");
+	cJSON * vtype=cJSON_GetObjectItem(obj,"_ArrayType_");
+	cJSON * vdata=cJSON_GetObjectItem(obj,"_ArrayData_");
+	if(!vdata){
+		ztype=cJSON_GetObjectItem(obj,"_ArrayZipType_");
+		vdata=cJSON_GetObjectItem(obj,"_ArrayZipData_");
+	}
+	if(vtype)
+		*type=vtype->valuestring;
+	if(vdata){
+		if(vsize){
+			cJSON *tmp=vsize->child;
+			*ndim=cJSON_GetArraySize(vsize);
+			for(int i=0;i<MIN(maxdim,*ndim);i++){
+				dims[i]=tmp->valueint;
+				tmp=tmp->next;
+			}
+		}
+		if(ztype){
+			size_t len, newlen;
+			int status=0;
+			char *buf=NULL;
+			int zipid=key_lookup((char *)(ztype->valuestring),zipformat);
+			if(zipid<0 ||zipid>zmBase64)
+				 return -1;
+			if(zipid==zmBase64)
+				return zmat_run(strlen(vdata->valuestring), (uchar *)vdata->valuestring, &len, (uchar **)vol, zmBase64, &status, 0);
+			else
+				ret=zmat_run(strlen(vdata->valuestring), (uchar *)vdata->valuestring, &len, (uchar **)&buf, zmBase64, &status, 0);
+			if(!ret && vsize){
+				if(*vol)
+					free(*vol);
+				ret=zmat_run(len, (uchar *)buf, &newlen, (uchar **)(vol), zipid, &status, 0);
+			}
+			if(buf)
+				free(buf);
+		}else
+			return -1;
+        }else
+		 return -1;
+	return ret;
+}
+
+void read_vec4float(float *vec4, cJSON *vec){
+	for(int i=0;i<4;i++){
+		vec4[i]=vec->valuedouble;
+		vec=vec->next;
+	}
+}
+
+// parsing a JSON/JNIfTI-encoded jnii volume file
+
+float * load_jnii(const char *fnm, nifti_1_header * hdr) {
+	char *jbuf;
+	int len;
+	float * img32=NULL;
+	cJSON *root, *jniihead, *jniidata, *tmp;
+
+	// reading JNIfTI/JSON file to a string
+	FILE *fp=fopen(fnm,"rb");
+	fseek (fp, 0, SEEK_END);
+	len=ftell(fp)+1;
+	jbuf=(char *)malloc(len);
+	rewind(fp);
+	if(fread(jbuf,len-1,1,fp)!=1)
+		return NULL;
+	jbuf[len-1]='\0';
+	fclose(fp);
+
+	// parse JNIfTI/JSON file
+	root = cJSON_Parse(jbuf);
+
+	if(!root){ // if not a valid JSON file, print error and return
+		char *ptrold, *ptr=(char*)cJSON_GetErrorPtr();
+		if(ptr) ptrold=strstr(jbuf,ptr);
+		if(fp!=NULL) fclose(fp);
+		if(ptr && ptrold){
+			char *offs=(ptrold-jbuf>=50) ? ptrold-50 : jbuf;
+			while(offs<ptrold){
+				fprintf(stderr,"%c",*offs);
+				offs++;
+			}
+			fprintf(stderr,"<error>%.50s\n",ptrold);
+		}
+		if(fp!=NULL)
+			free(jbuf);
+		return NULL;
+	}
+	free(jbuf);
+
+	jniihead = cJSON_GetObjectItem(root,"NIFTIHeader");
+	jniidata = cJSON_GetObjectItem(root,"NIFTIData");
+	memset(hdr, 0, sizeof(nifti_1_header));
+	if(jniihead){
+		hdr->sizeof_hdr=FIND_JSON_KEY("NIIHeaderSize",jniihead,348,valueint);
+		hdr->scl_slope=FIND_JSON_KEY("ScaleSlope",jniihead,1.0,valuedouble);
+		hdr->scl_inter=FIND_JSON_KEY("ScaleOffset",jniihead,0.0,valuedouble);
+		tmp=cJSON_GetObjectItem(jniihead,"Affine");
+		if(tmp && cJSON_IsArray(tmp) && cJSON_GetArraySize(tmp)==3){
+			cJSON *row=tmp->child;
+			cJSON *elem=row->child;
+			read_vec4float(hdr->srow_x, elem);
+			elem=row->next->child;
+			read_vec4float(hdr->srow_y, elem);
+			elem=row->next->next->child;
+			read_vec4float(hdr->srow_z, elem);
+		}else{
+			hdr->srow_x[0]=1.f;
+			hdr->srow_y[1]=1.f;
+			hdr->srow_z[2]=1.f;
+		}
+	}else
+		return NULL;
+
+	if(jniidata){
+		char *type=NULL;
+		void *imgRaw=NULL;
+
+		tmp=cJSON_GetObjectItem(jniidata, "_ArrayType_");
+		if(!tmp)
+			return NULL;
+
+		if(jdata_decode((void **)&imgRaw, hdr->dim, hdr->dim+1, 3, &type, jniidata)!=0){
+			if(imgRaw)
+				free(imgRaw);
+			return NULL;
+		}
+		int nvox = hdr->dim[1]*hdr->dim[2]*hdr->dim[3];
+		img32 = (float *) malloc(nvox*sizeof(float));
+		if(strcmp(type,"uint8")==0){
+			for(int i=0; i< nvox; i++)
+				img32[i]=((unsigned char *)imgRaw)[i];
+		}else if(strcmp(type,"int8")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((char *)imgRaw)[i];
+		}else if(strcmp(type,"uint16")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((unsigned short *)imgRaw)[i];
+		}else if(strcmp(type,"int16")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((short *)imgRaw)[i];
+		}else if(strcmp(type,"uint32")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((unsigned int *)imgRaw)[i];
+		}else if(strcmp(type,"int32")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((int *)imgRaw)[i];
+		}else if(strcmp(type,"uint64")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((long long *)imgRaw)[i];
+		}else if(strcmp(type,"int64")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((unsigned long long *)imgRaw)[i];
+		}else if(strcmp(type,"double")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((double *)imgRaw)[i];
+		}else if(strcmp(type,"single")==0){
+			memcpy(img32, imgRaw, nvox*sizeof(float));
+		}else{
+			if(imgRaw)
+				free(imgRaw);
+			return NULL;
+		}
+		if(imgRaw)
+			free(imgRaw);
+	}else
+		return NULL;
+	cJSON_Delete(root);
+	return img32;
+}
+#endif // HAVE_JSON
 
 int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isdouble){
 	FILE *fp;
