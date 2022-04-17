@@ -11,9 +11,6 @@
 #include <time.h>
 #ifdef HAVE_ZLIB
 	#include <zlib.h>
-	#ifdef HAVE_JSON
-		#include "cJSON.h"
-	#endif
 #endif
 #include "meshify.h"
 #include "base64.h" //required for GIfTI
@@ -538,47 +535,54 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 	return 0;
 }
 
-#ifdef HAVE_JSON
-
-int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isdouble){
 	FILE *fp;
-	cJSON *root=NULL, *hdr=NULL, *node=NULL, *face=NULL, *parser=NULL;
 	const char *pyparsers[]={"https://pypi.org/project/jdata","https://pypi.org/project/bjdata"};
 	const char *jsparsers[]={"https://www.npmjs.com/package/jda","https://www.npmjs.com/package/bjd"};
 	const char *cparsers[]={"https://github.com/DaveGamble/cJSON","https://github.com/NeuroJSON/ubj"};
-	char *jsonstr=NULL;
-	int dim[2]={0,3}, len[2]={1,0};
 	size_t compressedbytes, totalbytes;
 	unsigned char *compressed=NULL, *buf=NULL;
 	int ret=0, status=0;
 
-	root=cJSON_CreateObject();
+	float *floatpts=NULL;
+	if(!isdouble){
+		floatpts=(float *)malloc(npt*3*sizeof(float));
+		for(int i=0; i<npt; i++){
+			floatpts[i*3]=pts[i].x;
+			floatpts[i*3+1]=pts[i].y;
+			floatpts[i*3+2]=pts[i].z;
+		}
+	}
 
-	cJSON_AddItemToObject(root,  "_DataInfo_", hdr = cJSON_CreateObject());
-	cJSON_AddStringToObject(hdr, "JMeshVersion", "0.5");
-	cJSON_AddStringToObject(hdr, "Comment", "Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)");
-	cJSON_AddStringToObject(hdr, "AnnotationFormat", "https://github.com/NeuroJSON/jmesh/blob/master/JMesh_specification.md");
-	cJSON_AddStringToObject(hdr, "SerialFormat", "http://json.org");
-	cJSON_AddItemToObject(hdr,  "Parser", parser = cJSON_CreateObject());
-	cJSON_AddStringToObject(parser, "Python", tmp = cJSON_CreateStringArray(pyparsers,2));
-	cJSON_AddStringToObject(parser, "MATLAB", "https://github.com/NeuroJSON/jsonlab");
-	cJSON_AddStringToObject(parser, "JavaScript", tmp = jsparsers(pyparsers,2));
-	cJSON_AddStringToObject(parser, "CPP", "https://github.com/NeuroJSON/json");
-	cJSON_AddStringToObject(parser, "C", tmp = cJSON_CreateStringArray(cparsers,2));
+	fp=fopen(fnm,"wt");
+	if(fp==NULL)
+		return EXIT_FAILURE;
 
-	cJSON_AddItemToObject(root,  "MeshVertex3", node = cJSON_CreateObject());
-	cJSON_AddStringToObject(node,"_ArrayType_","double");
-	dim[0]=npt;
-	cJSON_AddItemToObject(node,  "_ArraySize_",cJSON_CreateIntArray(dim,2));
-	cJSON_AddStringToObject(node,"_ArrayZipType_","zlib");
-	len[1]=dim[0]*dim[1];
-	cJSON_AddItemToObject(node,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
+	fprintf(fp, "{\n\t\"_DataInfo_\":{\n");
+	fprintf(fp, "\t\t\"JMeshVersion\":\"0.5\",\n");
+	fprintf(fp, "\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)\",\n");
+	fprintf(fp, "\t\t\"AnnotationFormat\":\"https://neurojson.org/jmesh/draft1\",\n");
+	fprintf(fp, "\t\t\"SerialFormat\":\"https://json.org\",\n");
+	fprintf(fp, "\t\t\"Parser\":{\n");
+	fprintf(fp, "\t\t\t\"Python\":[\"%s\",\t\"%s\"],\n",pyparsers[0],pyparsers[1]);
+	fprintf(fp, "\t\t\t\"MATLAB\":\"https://github.com/NeuroJSON/jsonlab\",\n");
+	fprintf(fp, "\t\t\t\"JavaScript\":[\"%s\",\t\"%s\"],\n",jsparsers[0],jsparsers[1]);
+	fprintf(fp, "\t\t\t\"CPP\":\"https://github.com/NeuroJSON/json\",\n");
+	fprintf(fp, "\t\t\t\"C\":[\"%s\",\t\"%s\"]\n",cparsers[0],cparsers[1]);
+	fprintf(fp, "\t\t}\n\t},\n");
+	fprintf(fp, "\t\"MeshVertex3\":{\n");
+	fprintf(fp, "\t\t\"_ArrayType_\":\"%s\",\n", (isdouble ? "double" : "single"));
+	fprintf(fp, "\t\t\"_ArraySize_\":[%d, 3],\n", npt);
+	fprintf(fp, "\t\t\"_ArrayZipType_\":\"zlib\",\n");
+	fprintf(fp, "\t\t\"_ArrayZipSize_\":[1, %d],\n", npt*3);
 
-	totalbytes=dim[0]*dim[1]*sizeof(pts[0].x);
-	ret=zmat_run(totalbytes, (unsigned char *)&(pts[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	totalbytes=npt*3*(isdouble ? sizeof(pts[0].x) : sizeof(float));
+	ret=zmat_run(totalbytes, (isdouble ? (unsigned char *)&(pts[0].x) : (unsigned char *)floatpts), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
 	if(!ret){
-		 ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
-		 cJSON_AddStringToObject(node,  "_ArrayZipData_",(char *)buf);
+		ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
+		fprintf(fp, "\t\t\"_ArrayZipData_\":\"");
+		fwrite(buf, 1, totalbytes, fp);
+		fprintf(fp, "\"\n");
 	}
 	if(compressed){
 		free(compressed);
@@ -588,48 +592,37 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 		free(buf);
 		buf=NULL;
 	}
-	cJSON_AddItemToObject(root,  "MeshTri3", face = cJSON_CreateObject());
-	cJSON_AddStringToObject(face,"_ArrayType_","uint32");
-	dim[0]=ntri;
-	cJSON_AddItemToObject(face,  "_ArraySize_",cJSON_CreateIntArray(dim,2));
-	cJSON_AddStringToObject(face,"_ArrayZipType_","zlib");
-	len[1]=dim[0]*dim[1];
-	cJSON_AddItemToObject(face,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
+	fprintf(fp, "\t},\n");
+	fprintf(fp, "\t\"MeshTri3\":{\n");
+	fprintf(fp, "\t\t\"_ArrayType_\":\"uint32\",\n");
+	fprintf(fp, "\t\t\"_ArraySize_\":[%d, 3],\n", ntri);
+	fprintf(fp, "\t\t\"_ArrayZipType_\":\"zlib\",\n");
+	fprintf(fp, "\t\t\"_ArrayZipSize_\":[1, %d],\n", ntri*3);
 
-	totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
+	totalbytes=ntri*3*sizeof(tris[0].x);
 	unsigned int *val=(unsigned int *)malloc(totalbytes);
 	memcpy(val,&(tris[0].x),totalbytes);
-	for(int i=0;i<len[1];i++)
+	for(int i=0;i<ntri*3;i++)
 		val[i]++;
 	ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
 	free(val);
 	if(!ret){
 		ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
-		cJSON_AddStringToObject(face,  "_ArrayZipData_",(char *)buf);
+		fprintf(fp, "\t\t\"_ArrayZipData_\":\"");
+		fwrite(buf, 1, totalbytes, fp);
+		fprintf(fp, "\"\n");
 	}
 	if(compressed)
 		free(compressed);
 	if(buf)
 		free(buf);
+	if(floatpts)
+		free(floatpts);
 
-	jsonstr=cJSON_Print(root);
-	if(jsonstr==NULL)
-		return EXIT_FAILURE;
-
-	fp=fopen(fnm,"wt");
-	if(fp==NULL)
-		return EXIT_FAILURE;
-	fprintf(fp,"%s\n",jsonstr);
+	fprintf(fp, "\t}\n}\n");
 	fclose(fp);
-
-	if(jsonstr)
-		free(jsonstr);
-	if(root)
-		cJSON_Delete(root);
 	return EXIT_SUCCESS;
 }
-#endif //HAVE_JSON
-
 
 void write_ubjsonint(int len, int *dat, FILE *fp){
 	if (!&littleEndianPlatform)
@@ -656,8 +649,8 @@ int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 		"N","","_DataInfo_","{",
 			"N","","JMeshVersion","S","","0.5",
 			"N","","Comment","S","","Created by nii2mesh with NeuroJSON Binay JMesh format (http://neurojson.org)",
-			"N","","AnnotationFormat","S","","https://github.com/NeuroJSON/jmesh/blob/master/JMesh_specification.md",
-			"N","","SerialFormat","S","","http://neurojson.org/bjdata/draft2",
+			"N","","AnnotationFormat","S","","https://neurojson.org/jmesh/draft1",
+			"N","","SerialFormat","S","","https://neurojson.org/bjdata/draft2",
 			"N","","Parser","{",
 				"N","","Python","[",
 					"S","","https://pypi.org/project/jdata",
@@ -694,7 +687,7 @@ int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 
 	float *floatpts=NULL;
 	if(!isdouble){
-		floatpts=(float *)calloc(npt*3, sizeof(float));
+		floatpts=(float *)malloc(npt*3*sizeof(float));
 		for(int i=0; i<npt; i++){
 			floatpts[i*3]=pts[i].x;
 			floatpts[i*3+1]=pts[i].y;
@@ -1206,10 +1199,8 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	else if ((strstr(ext, ".inflated")) || (strstr(ext, ".pial")))
 		return save_freesurfer(fnm, tris, pts, ntri, npt);
 #ifdef HAVE_ZLIB
-#ifdef HAVE_JSON
 	else if (strstr(ext, ".jmsh"))
 		return save_jmsh(fnm, tris, pts, ntri, npt, isdouble);
-#endif //HAVE_JSON
 	else if (strstr(ext, ".bmsh"))
 		return save_bmsh(fnm, tris, pts, ntri, npt, isGz, isdouble);
 #endif //HAVE_ZLIB

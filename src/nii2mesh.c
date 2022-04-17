@@ -244,11 +244,7 @@ int main(int argc,char **argv) {
 		printf("    -d v    double precision (0=use single precision, 1=use double precision (for bmsh/json), default %d)\n", isdouble);
 		printf("    -s v    post-smoothing iterations (default %d)\n", postSmooth);
 		printf("    -v v    verbose (0=silent, 1=verbose, default %d)\n", verbose);
-		#ifdef HAVE_JSON
 		printf("mesh extension sets format (.gii, .mz3, .bmsh, .jmsh, .json, .obj, .ply, .pial, .stl, .vtk)\n");
-		#else
-		printf("mesh extension sets format (.gii, .mz3, .bmsh, .json, .obj, .ply, .pial, .stl, .vtk)\n");
-		#endif
 		printf("Example: '%s voxels.nii mesh.obj'\n",argv[0]);
 		printf("Example: '%s bet.nii.gz -i 22 myOutput.obj'\n",argv[0]);
 		printf("Example: '%s bet.nii.gz -i b bright.obj'\n",argv[0]);
