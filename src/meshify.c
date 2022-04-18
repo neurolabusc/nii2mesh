@@ -594,13 +594,13 @@ int  jdata_decode(void **vol, unsigned short *ndim, unsigned short *dims, int ma
 			if(zipid<0 ||zipid>zmBase64)
 				 return -1;
 			if(zipid==zmBase64)
-				return zmat_run(strlen(vdata->valuestring), (uchar *)vdata->valuestring, &len, (uchar **)vol, zmBase64, &status, 0);
+				return zmat_run(strlen(vdata->valuestring), (unsigned char *)vdata->valuestring, &len, (unsigned char **)vol, zmBase64, &status, 0);
 			else
-				ret=zmat_run(strlen(vdata->valuestring), (uchar *)vdata->valuestring, &len, (uchar **)&buf, zmBase64, &status, 0);
+				ret=zmat_run(strlen(vdata->valuestring), (unsigned char *)vdata->valuestring, &len, (unsigned char **)&buf, zmBase64, &status, 0);
 			if(!ret && vsize){
 				if(*vol)
 					free(*vol);
-				ret=zmat_run(len, (uchar *)buf, &newlen, (uchar **)(vol), zipid, &status, 0);
+				ret=zmat_run(len, (unsigned char *)buf, &newlen, (unsigned char **)(vol), zipid, &status, 0);
 			}
 			if(buf)
 				free(buf);
