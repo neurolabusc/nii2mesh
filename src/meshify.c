@@ -618,6 +618,26 @@ void read_vec4float(float *vec4, cJSON *vec){
 	}
 }
 
+void array3d_row2col(float **vol, unsigned short *dim){
+	unsigned int x,y,z;
+	unsigned int dimxy,dimyz;
+	float *newvol=NULL;
+
+	if(*vol==NULL || dim[0]==0 || dim[1]==0 || dim[2]==0){
+		return;
+	}
+	newvol=(float *)malloc(sizeof(float)*dim[0]*dim[1]*dim[2]);
+	dimxy=dim[0]*dim[1];
+	dimyz=dim[1]*dim[2];
+	for(x=0;x<dim[0];x++)
+		for(y=0;y<dim[1];y++)
+			for(z=0;z<dim[2];z++){
+				newvol[z*dimxy+y*dim[0]+x]=(*vol)[x*dimyz+y*dim[2]+z];
+			}
+	free(*vol);
+	*vol=newvol;
+}
+
 // parsing a JSON/JNIfTI-encoded jnii volume file
 
 float * load_jnii(const char *fnm, nifti_1_header * hdr) {
@@ -733,6 +753,10 @@ float * load_jnii(const char *fnm, nifti_1_header * hdr) {
 		}
 		if(imgRaw)
 			free(imgRaw);
+
+		tmp=cJSON_GetObjectItem(jniidata, "_ArrayOrder_");
+		if(!tmp || (cJSON_IsString(tmp) && ((tmp->valuestring)[0]=='r' || (tmp->valuestring)[0]=='R')))
+			array3d_row2col(&img32, hdr->dim+1);
 	}else
 		return NULL;
 	cJSON_Delete(root);
