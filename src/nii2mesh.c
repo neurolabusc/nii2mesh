@@ -360,11 +360,15 @@ int main(int argc,char **argv) {
 			omp_set_num_threads(maxNumThreads);
 		#endif
 		int partial_OK, nOK;
+		#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 		#pragma omp parallel private(partial_OK) shared(nOK)
+		#endif
 		{
 			partial_OK = 0;
 			nOK = 0;
+			#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 			#pragma omp for
+			#endif
 			for (int i = 1; i <= nLabel; i++) {
 				printf("%d/%d\n", i, nLabel);
 				float * imgbinary = (float *) malloc(nvox*sizeof(float));
@@ -389,7 +393,9 @@ int main(int argc,char **argv) {
 					partial_OK ++;
 				free(imgbinary);
 			} //for nLabel
+			#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 			#pragma omp critical
+			#endif
 			{
 				nOK += partial_OK;
 			}

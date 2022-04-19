@@ -1141,7 +1141,7 @@ void writePLY( MCB *mcb , const char *fn) {
   if (fp == NULL)
     return;// EXIT_FAILURE;
   fputs("ply\n",fp);
-  if (&littleEndianPlatform)
+  if (littleEndianPlatform())
     fputs("format binary_little_endian 1.0\n",fp);
   else
     fputs("format binary_big_endian 1.0\n",fp);
