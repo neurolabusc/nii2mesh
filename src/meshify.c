@@ -648,6 +648,10 @@ float * load_jnii(const char *fnm, nifti_1_header * hdr) {
 
 	// reading JNIfTI/JSON file to a string
 	FILE *fp=fopen(fnm,"rb");
+	if(!fp){
+		printf("Unable to open the specified file %s\n", fnm);
+		return NULL;
+	}
 	fseek (fp, 0, SEEK_END);
 	len=ftell(fp)+1;
 	jbuf=(char *)malloc(len);
