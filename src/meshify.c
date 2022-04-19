@@ -793,7 +793,7 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 
 	fprintf(fp, "{\n\t\"_DataInfo_\":{\n");
 	fprintf(fp, "\t\t\"JMeshVersion\":\"0.5\",\n");
-	fprintf(fp, "\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)\",\n");
+	fprintf(fp, "\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (https://neurojson.org)\",\n");
 	fprintf(fp, "\t\t\"AnnotationFormat\":\"https://neurojson.org/jmesh/draft1\",\n");
 	fprintf(fp, "\t\t\"SerialFormat\":\"https://json.org\",\n");
 	fprintf(fp, "\t\t\"Parser\":{\n");
@@ -881,7 +881,7 @@ int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	"{",
 		"N","","_DataInfo_","{",
 			"N","","JMeshVersion","S","","0.5",
-			"N","","Comment","S","","Created by nii2mesh with NeuroJSON Binay JMesh format (http://neurojson.org)",
+			"N","","Comment","S","","Created by nii2mesh with NeuroJSON Binay JMesh format (https://neurojson.org)",
 			"N","","AnnotationFormat","S","","https://neurojson.org/jmesh/draft1",
 			"N","","SerialFormat","S","","https://neurojson.org/bjdata/draft2",
 			"N","","Parser","{",
@@ -1042,7 +1042,7 @@ int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	if (fp == NULL)
 		return EXIT_FAILURE;
 	fprintf(fp,"{\n");
-	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (http://neurojson.org)\"\n\t},\n");
+	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (https://neurojson.org)\"\n\t},\n");
 	fprintf(fp,"\t\"MeshVertex3\":[\n");
         if(isdouble){
                 for (int i=0;i<npt;i++)
