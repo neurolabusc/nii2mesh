@@ -362,7 +362,7 @@ int meshify(float * img, size_t dim[3], int originalMC, float isolevel, vec3i **
 	//printf("Bounding box for bright voxels: %d..%d %d..%d %d..%d\n", lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
 	for (int i=0;i<3;i++) {
 		lo[i] = MAX(lo[i] - 1, 0);
-		hi[i] = MIN(hi[i] + 2, dim[i]);
+		hi[i] = MIN(hi[i] + 2, dim[i]-1);
 	}
 	double startTimeMC = clockMsec();
 	vec3d *pts = NULL;
