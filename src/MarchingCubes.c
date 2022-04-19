@@ -1094,14 +1094,14 @@ int marchingCubes(float * img, size_t dim[3], int lo[3], int hi[3], int original
     return EXIT_FAILURE;
   }
   int npt = mcp->nverts;
-  *vs = malloc(npt*sizeof(vec3d));
+  *vs = (vec3d*) malloc(npt*sizeof(vec3d));
   for (int i = 0; i < npt; i++) {
     (*vs)[i].x = mcp->vertices[i].x + lo[0];
     (*vs)[i].y = mcp->vertices[i].y + lo[1];
     (*vs)[i].z = mcp->vertices[i].z + lo[2];
   }
   int ntri = mcp->ntrigs;
-  *ts = malloc(ntri * sizeof(vec3i));
+  *ts = (vec3i*) malloc(ntri * sizeof(vec3i));
   for (int i=0;i<ntri;i++) {
     (*ts)[i].x = mcp->triangles[i].v3;
     (*ts)[i].y = mcp->triangles[i].v2;

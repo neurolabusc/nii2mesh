@@ -178,7 +178,7 @@ int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float
 	vec3d *pts = NULL;
 	vec3i *tris = NULL;
 	int ntri, npt;
-	size_t dim[3] = {hdr.dim[1], hdr.dim[2], hdr.dim[3]};
+	size_t dim[3] = {(size_t)hdr.dim[1], (size_t)hdr.dim[2], (size_t)hdr.dim[3]};
 	if (meshify(img, dim, originalMC, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 	apply_sform(tris, pts, ntri, npt, hdr.srow_x, hdr.srow_y, hdr.srow_z);
@@ -295,11 +295,11 @@ int main(int argc,char **argv) {
 	double startTime = clockMsec();
 	float * img=NULL;
 #ifdef HAVE_JSON
-        if(strstr(argv[1], ".jnii") - argv[1] == strlen(argv[1])-5)
-                img = load_jnii(argv[1], &hdr);
-        else
+	if(strstr(argv[1], ".jnii") - argv[1] == strlen(argv[1])-5)
+			img = load_jnii(argv[1], &hdr);
+	else
 #endif
-                img = load_nii(argv[1], &hdr);
+	img = load_nii(argv[1], &hdr);
 	if (verbose)
 		printf("load from disk: %ld ms\n", timediff(startTime, clockMsec()));
 	if (img == NULL)
