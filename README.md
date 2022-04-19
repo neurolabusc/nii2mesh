@@ -1,6 +1,6 @@
 ## About
 
-This tool converts a NIfTI 3D voxel image to a triangulated mesh. It can save meshes in in the GIfTI (.gii), mz3, JMesh (.jmsh, .bmsh), obj, ply, FreeSurfer (.pial), stl, vtk, formats. You can use [dcm2niix](https://github.com/rordenlab/dcm2niix) to convert DICOM images to NIfTI. The software is written in pure C (rather than C++).
+This tool converts a NIfTI 3D voxel image to a triangulated mesh. It can save meshes in in the GIfTI (.gii), mz3, [JMesh](https://github.com/NeuroJSON/jmesh) (.jmsh, .bmsh), obj, ply, FreeSurfer (.pial), stl, vtk, formats. You can use [dcm2niix](https://github.com/rordenlab/dcm2niix) to convert DICOM images to NIfTI. The software is written in pure C (rather than C++).
 
 ## Compiling
 
@@ -174,9 +174,9 @@ nii2mesh can save meshes to the GIfTI (.gii), JSON, JMesh (.jmsh, .bmsh), mz3, o
  - [PLY](http://paulbourke.net/dataformats/ply/) is an old format that is widely supported. The binary form created by nii2mesh yields small files and quick loading time.
  - [MZ3](https://github.com/neurolabusc/surf-ice/tree/master/mz3) is the native format of [Surfice](https://www.nitrc.org/projects/surfice/). It is small and fast, but not widely supported.
  - [FreeSurfer](https://surfer.nmr.mgh.harvard.edu) format is simple and used by FreeSurfer.
- - [json](https://github.com/NeuroJSON/jmesh) creates human readable ASCII JSON files in the format described by [JMesh](https://github.com/NeuroJSON/jmesh). Be aware that other tools create legal JSON files to describe triangular meshes using a structure that is not compatible with json.
- - [jmsh](https://github.com/NeuroJSON/jmesh) files are in the [NeuroJSON](https://neurojson.org) [JMesh](https://github.com/fangq/jmesh) format, which inserts a compressed binary stream into a human readable JSON file. Supporting this format slightly increases the size of the executable (using the optional `-DHAVE_JSON` compiler flag and `cJSON` files).
- - [bmsh](https://github.com/NeuroJSON/jmesh) is a binary-JSON ([BJData - Draft 2](https://github.com/NeuroJSON/bjdata/blob/Draft_2/Binary_JData_Specification.md)) based mesh-data container based on the JMesh specification; both `.bmsh` and `.jmsh` support data-level compression
+ - [JSON](https://github.com/NeuroJSON/jmesh) creates human readable ASCII JSON files in the format described by [JMesh specification](https://github.com/NeuroJSON/jmesh). Be aware that other tools create legal JSON files to describe triangular meshes using a structure that is not compatible with json.
+ - [JMSH](https://github.com/NeuroJSON/jmesh) files are in the [NeuroJSON](https://neurojson.org) [JMesh](https://github.com/fangq/jmesh) format, which inserts a compressed binary stream into a human readable JSON file.
+ - [BMSH](https://github.com/NeuroJSON/jmesh) is a binary-JSON ([BJData - Draft 2](https://github.com/NeuroJSON/bjdata/blob/Draft_2/Binary_JData_Specification.md)) based mesh-data container based on the JMesh specification; both `.bmsh` and `.jmsh` support data-level compression
  - [VTK](http://www.princeton.edu/~efeibush/viscourse/vtk.pdf) refers to the legacy VTK format, which is supported by many tools (unlike the more flexible modern XML-based VTK formats).
  - [STL](http://www.paulbourke.net/dataformats/stl/) format is popular for 3D printing. You should use any other format unless required. This format does not re-use vertices across triangles, this results in very large files. Further, this means the meshes are either slow to load or appear to have a faceted jagged appearance.
 
