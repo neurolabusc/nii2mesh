@@ -174,11 +174,11 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 	return img32;
 }
 
-int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float reduceFraction, int preSmooth, bool onlyLargest, bool fillBubbles, int postSmooth, bool verbose, char * outnm, int quality) {
+int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float reduceFraction, int preSmooth, bool onlyLargest, bool fillBubbles, int postSmooth, bool verbose, char * outnm, int quality, bool isdouble) {
 	vec3d *pts = NULL;
 	vec3i *tris = NULL;
 	int ntri, npt;
-	size_t dim[3] = {hdr.dim[1], hdr.dim[2], hdr.dim[3]};
+	size_t dim[3] = {(size_t)hdr.dim[1], (size_t)hdr.dim[2], (size_t)hdr.dim[3]};
 	if (meshify(img, dim, originalMC, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 	apply_sform(tris, pts, ntri, npt, hdr.srow_x, hdr.srow_y, hdr.srow_z);
@@ -203,7 +203,7 @@ int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float
 			printf("simplify vertices %d->%d triangles %d->%d (r = %g): %ld ms\n", startVert, npt, startTri, ntri, (float)ntri / (float) startTri, timediff(startTime, clockMsec()));
 		startTime = clockMsec();
 	}
-	save_mesh(outnm, tris, pts, ntri, npt, (quality > 0));
+	save_mesh(outnm, tris, pts, ntri, npt, (quality > 0), isdouble);
 	if (verbose)
 		printf("save to disk: %ld ms\n", timediff(startTime, clockMsec()));
 	free(tris);
@@ -223,6 +223,7 @@ int main(int argc,char **argv) {
 	int quality = 1;
 	int originalMC = 0;
 	bool verbose = false;
+	bool isdouble = false;
 	char atlasFilename[mxStr] = "";
 	// Check the command line, minimal is name of input and output files
 	if (argc < 3) {
@@ -239,14 +240,11 @@ int main(int argc,char **argv) {
 		#endif
 		printf("    -p v    pre-smoothing (0=skip, 1=smooth, default %d)\n", preSmooth);
 		printf("    -r v    reduction factor (default %g)\n", reduceFraction);
-		printf("    -q v    quality (0=fast, 1= balanced, 2=best, default %d)\n", quality);
+		printf("    -q v    quality (0=fast, 1=balanced, 2=best, default %d)\n", quality);
+		printf("    -d v    double precision (0=use single precision, 1=use double precision (for bmsh/json), default %d)\n", isdouble);
 		printf("    -s v    post-smoothing iterations (default %d)\n", postSmooth);
 		printf("    -v v    verbose (0=silent, 1=verbose, default %d)\n", verbose);
-		#ifdef HAVE_JSON
-		printf("mesh extension sets format (.gii, .jmsh, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
-		#else
-		printf("mesh extension sets format (.gii, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
-		#endif
+		printf("mesh extension sets format (.gii, .mz3, .bmsh, .jmsh, .json, .obj, .ply, .pial, .stl, .vtk)\n");
 		printf("Example: '%s voxels.nii mesh.obj'\n",argv[0]);
 		printf("Example: '%s bet.nii.gz -i 22 myOutput.obj'\n",argv[0]);
 		printf("Example: '%s bet.nii.gz -i b bright.obj'\n",argv[0]);
@@ -283,6 +281,8 @@ int main(int argc,char **argv) {
 				preSmooth = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-q") == 0)
 				quality = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-d") == 0)
+				isdouble = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-s") == 0)
 				postSmooth = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-r") == 0)
@@ -293,7 +293,13 @@ int main(int argc,char **argv) {
 	}
 	nifti_1_header hdr;
 	double startTime = clockMsec();
-	float * img = load_nii(argv[1], &hdr);
+	float * img=NULL;
+#ifdef HAVE_JSON
+	if(strstr(argv[1], ".jnii") - argv[1] == strlen(argv[1])-5)
+			img = load_jnii(argv[1], &hdr);
+	else
+#endif
+	img = load_nii(argv[1], &hdr);
 	if (verbose)
 		printf("load from disk: %ld ms\n", timediff(startTime, clockMsec()));
 	if (img == NULL)
@@ -354,11 +360,15 @@ int main(int argc,char **argv) {
 			omp_set_num_threads(maxNumThreads);
 		#endif
 		int partial_OK, nOK;
+		#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 		#pragma omp parallel private(partial_OK) shared(nOK)
+		#endif
 		{
 			partial_OK = 0;
 			nOK = 0;
+			#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 			#pragma omp for
+			#endif
 			for (int i = 1; i <= nLabel; i++) {
 				printf("%d/%d\n", i, nLabel);
 				float * imgbinary = (float *) malloc(nvox*sizeof(float));
@@ -378,12 +388,14 @@ int main(int argc,char **argv) {
 				}
 				char outnm[mxStr];
 				if (snprintf(outnm,sizeof(outnm),"%s%s%s", basenm, atlasLabels[i].str, ext) < 0) exit(EXIT_FAILURE);
-				int reti = nii2(hdr, imgbinary, originalMC, 0.5, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, outnm, quality);
+				int reti = nii2(hdr, imgbinary, originalMC, 0.5, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, outnm, quality, isdouble);
 				if (reti == EXIT_SUCCESS)
 					partial_OK ++;
 				free(imgbinary);
 			} //for nLabel
+			#if defined(_OPENMP) //compile with 'OMP=1 make -j'
 			#pragma omp critical
+			#endif
 			{
 				nOK += partial_OK;
 			}
@@ -395,7 +407,7 @@ int main(int argc,char **argv) {
 	} else {
 		if (isoDarkMediumBright123 != 0) //user did not provide numeric isosurface brightness
 			isolevel = setThreshold(img, nvox, isoDarkMediumBright123);
-		ret = nii2(hdr, img, originalMC, isolevel, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, argv[argc-1], quality);
+		ret = nii2(hdr, img, originalMC, isolevel, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, argv[argc-1], quality, isdouble);
 	}
 	free(img);
 	exit(ret);

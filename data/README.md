@@ -5,3 +5,4 @@ This folder contains NIfTI format images for evaluating mesh conversion.
  - `pve_1.nii.gz` [FAST](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FAST) gray matter segmentation.
  - `pve_2.nii.gz` [FAST](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FAST) white matter segmentation.
  - `D99_atlas_v2.0_right.nii.gz` is the [Macaque Atlas v2.0](https://afni.nimh.nih.gov/pub/dist/doc/htmldoc/nonhuman/macaque_tempatl/atlas_d99v2.html)
+ - `digimouse.jnii` [JNIfTI](http://neurojson.org/jnifti/draft1) formatted [Digimouse Atlas](https://neuroimage.usc.edu/neuro/Digimouse_Download), see Fig. 9 of [BlenderPhotonics paper](https://doi.org/10.1117/1.jbo.27.8.083014)
