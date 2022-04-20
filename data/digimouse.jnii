@@ -1,21 +1,21 @@
 {
 	"_DataInfo_":{
 		"JNIFTIVersion":"0.5",
-		"Comment":"Created by JNIFTY Toolbox (https:\/\/github.com\/NeuroJSON\/jnifty)",
-		"AnnotationFormat":"https:\/\/github.com\/NeuroJSON\/jnifti\/blob\/master\/JNIfTI_specification.md",
-		"SerialFormat":"http:\/\/json.org",
+		"Comment":"Created by JNIFTY Toolbox (https://github.com/NeuroJSON/jnifty)",
+		"AnnotationFormat":"https://github.com/NeuroJSON/jnifti/blob/master/JNIfTI_specification.md",
+		"SerialFormat":"http://json.org",
 		"Parser":{
 			"Python":[
-				"https:\/\/pypi.org\/project\/jdata",
-				"https:\/\/pypi.org\/project\/bjdata"
+				"https://pypi.org/project/jdata",
+				"https://pypi.org/project/bjdata"
 			],
 			"MATLAB":[
-				"https:\/\/github.com\/NeuroJSON\/jnifty",
-				"https:\/\/github.com\/NeuroJSON\/jsonlab"
+				"https://github.com/NeuroJSON/jnifty",
+				"https://github.com/NeuroJSON/jsonlab"
 			],
-			"JavaScript":"https:\/\/github.com\/NeuroJSON\/jsdata",
-			"CPP":"https:\/\/github.com\/NeuroJSON\/json",
-			"C":"https:\/\/github.com\/NeuroJSON\/ubj"
+			"JavaScript":"https://github.com/NeuroJSON/jsdata",
+			"CPP":"https://github.com/NeuroJSON/json",
+			"C":"https://github.com/NeuroJSON/ubj"
 		}
 	},
 	"NIFTIHeader":{
@@ -59,7 +59,7 @@
 		"TimeOffset":0,
 		"A75GlobalMax":255,
 		"A75GlobalMin":0,
-		"Description":"Created by Qianqian Fang for BlenderPhotonics, see paper https:\/\/doi.org\/10.1117\/1.JBO.27.8.083014",
+		"Description":"Created by Qianqian Fang for BlenderPhotonics, see paper https://doi.org/10.1117/1.JBO.27.8.083014",
 		"AuxFile":"",
 		"QForm":0,
 		"SForm":0,
@@ -78,7 +78,7 @@
 			[0,1,0,0],
 			[0,0,1,0]
 		],
-		"Name":"Digimouse Atlas - downsampled 2x from original 380x992x208 volume downloaded from https:\/\/neuroimage.usc.edu\/neuro\/Digimouse_Download",
+		"Name":"Digimouse Atlas - downsampled 2x from original 380x992x208 volume downloaded from https://neuroimage.usc.edu/neuro/Digimouse_Download",
 		"NIIFormat":"JNIfTI v0.5",
 		"NIIQfac_":0,
 		"NIIEndian_":"L"
