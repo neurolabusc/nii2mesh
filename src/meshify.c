@@ -266,9 +266,14 @@ double clockMsec() { //return milliseconds since midnight
 	clock_t t = clock();
 	return (double)((double)t) / (CLOCKS_PER_SEC / 1000.0);
 #else
-	struct timespec _t;
-	clock_gettime(CLOCK_MONOTONIC, &_t);
-	return _t.tv_sec*1000.0 + (_t.tv_nsec/1.0e6);
+	#ifdef __MINGW32__
+		time_t seconds_since_midnight = time(NULL) % 86400;
+		return seconds_since_midnight;
+	#else
+		struct timespec _t;
+		clock_gettime(CLOCK_MONOTONIC, &_t);
+		return _t.tv_sec*1000.0 + (_t.tv_nsec/1.0e6);
+	#endif
 #endif
 }
 

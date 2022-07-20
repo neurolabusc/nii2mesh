@@ -2,6 +2,10 @@
 
 This tool converts a NIfTI 3D voxel image to a triangulated mesh. It can save meshes in in the GIfTI (.gii), mz3, obj, ply, FreeSurfer (.pial), stl, vtk, formats. You can use [dcm2niix](https://github.com/rordenlab/dcm2niix) to convert DICOM images to NIfTI. The software is written in pure C (rather than C++).
 
+## Live Demo
+
+ - The [live demo web page](https://github.com/rordenlab/nii2meshWeb) allows you to use nii2mesh without installing any software on your computer.
+
 ## Compiling
 
 For Unix computers (Linux, macOS), you can build the executable using the make command:
@@ -222,3 +226,4 @@ MeshFix bet.ply better.ply
  - [nii\_2\_mesh\_conversion.py](https://github.com/MahsaShk/MeshProcessing) is related to nii2mesh: it converts a binary NIfTI image to a mesh in STL format using VTK the package.
   - [DicomToMesh](https://github.com/AOT-AG/DicomToMesh) is available for Debian-based Linux.
  - [Online tool for NIfTI to STL conversion](http://niftyweb.cs.ucl.ac.uk/program.php?p=PRINTING).
+ - [Comparison of voxel to mesh conversion tools](https://threedmedprint.biomedcentral.com/articles/10.1186/s41205-020-00069-2).
