@@ -1,6 +1,6 @@
 ## About
 
-This tool converts a NIfTI 3D voxel image to a triangulated mesh. It can save meshes in in the GIfTI (.gii), mz3, obj, ply, FreeSurfer (.pial), stl, vtk, formats. You can use [dcm2niix](https://github.com/rordenlab/dcm2niix) to convert DICOM images to NIfTI. The software is written in pure C (rather than C++).
+This tool converts a NIfTI 3D voxel image to a triangulated mesh. It can save meshes in in the GIfTI (.gii), mz3, [JMesh](https://github.com/NeuroJSON/jmesh) (.jmsh, .bmsh), obj, ply, FreeSurfer (.pial), stl, vtk, formats. You can use [dcm2niix](https://github.com/rordenlab/dcm2niix) to convert DICOM images to NIfTI. The software is written in pure C (rather than C++).
 
 ## Live Demo
 
@@ -56,10 +56,11 @@ Options
     -o v    Original marching cubes (0=Improved Lewiner, 1=Original, default 0)
     -p v    pre-smoothing (0=skip, 1=smooth, default 1)
     -r v    reduction factor (default 0.25)
-    -q v    quality (0=fast, 1= balanced, 2=best, default 1)
+    -q v    quality (0=fast, 1=balanced, 2=best, default 1)
+    -d v    double precision (0=use single precision, 1=use double precision (for bmsh/json), default 0)
     -s v    post-smoothing iterations (default 0)
     -v v    verbose (0=silent, 1=verbose, default 0)
-mesh extension sets format (.gii, .mz3, .obj, .ply, .pial, .stl, .vtk)
+mesh extension sets format (.gii, .mz3, .bmsh, .jmsh, .json, .obj, .ply, .pial, .stl, .vtk)
 Example: './nii2mesh voxels.nii mesh.obj'
 Example: './nii2mesh bet.nii.gz -i 22 myOutput.obj'
 Example: './nii2mesh bet.nii.gz -i b bright.obj'
@@ -169,7 +170,7 @@ with the resulting meshes have the file names `D99_pu.k1.gii`, `D99_cd.k2.gii`, 
 
 ## Supported Mesh Formats
 
-nii2mesh can save meshes to the GIfTI (.gii), json, jmsh, mz3, obj, off, ply, FreeSurfer (.pial), stl, vtk.  [MeshLab](https://www.meshlab.net) can export meshes to many other formats. Therefore, one option is to create a PLY mesh with nii2mesh and use MeshLab to export to your favorite format.
+nii2mesh can save meshes to the GIfTI (.gii), JSON, JMesh (.jmsh, .bmsh), mz3, obj, off, ply, FreeSurfer (.pial), stl, vtk.  [MeshLab](https://www.meshlab.net) can export meshes to many other formats. Therefore, one option is to create a PLY mesh with nii2mesh and use MeshLab to export to your favorite format.
 
  - [GIfTI](https://www.nitrc.org/projects/gifti/) is a popular Geometry format for Neuroimaging. The usage of base64 encoding leads to relatively large files and slow loading.
  - [OBJ](http://www.paulbourke.net/dataformats/obj/) format is very popular, and may be a great choice for 3D printing. The use of ASCII rather than binary encoding makes these files large, slow to read and typically suggests limited precision.
@@ -177,8 +178,9 @@ nii2mesh can save meshes to the GIfTI (.gii), json, jmsh, mz3, obj, off, ply, Fr
  - [PLY](http://paulbourke.net/dataformats/ply/) is an old format that is widely supported. The binary form created by nii2mesh yields small files and quick loading time.
  - [MZ3](https://github.com/neurolabusc/surf-ice/tree/master/mz3) is the native format of [Surfice](https://www.nitrc.org/projects/surfice/). It is small and fast, but not widely supported.
  - [FreeSurfer](https://surfer.nmr.mgh.harvard.edu) format is simple and used by FreeSurfer.
- - [json](https://github.com/fangq/jmesh) creates human readable ASCII JSON files in the format described by [jmesh](https://github.com/fangq/jmesh). Be aware that other tools create legal JSON files to describe triangular meshes using a structure that is not compatible with json.
- - [jmsh](https://github.com/fangq/jmesh) files are in the [jmesh](https://github.com/fangq/jmesh) format, which inserts a compressed binary stream into a human readable JSON file. Supporting this format slightly increases the size of the executable (using the optional `-DHAVE_JSON` compiler flag and `cJSON` files).
+ - [JSON](https://github.com/NeuroJSON/jmesh) creates human readable ASCII JSON files in the format described by [JMesh specification](https://github.com/NeuroJSON/jmesh). Be aware that other tools create legal JSON files to describe triangular meshes using a structure that is not compatible with json.
+ - [JMSH](https://github.com/NeuroJSON/jmesh) files are in the [NeuroJSON](https://neurojson.org) [JMesh](https://github.com/fangq/jmesh) format, which inserts a compressed binary stream into a human readable JSON file.
+ - [BMSH](https://github.com/NeuroJSON/jmesh) is a binary-JSON ([BJData - Draft 2](https://github.com/NeuroJSON/bjdata/blob/Draft_2/Binary_JData_Specification.md)) based mesh-data container based on the JMesh specification; both `.bmsh` and `.jmsh` support data-level compression
  - [VTK](http://www.princeton.edu/~efeibush/viscourse/vtk.pdf) refers to the legacy VTK format, which is supported by many tools (unlike the more flexible modern XML-based VTK formats).
  - [STL](http://www.paulbourke.net/dataformats/stl/) format is popular for 3D printing. You should use any other format unless required. This format does not re-use vertices across triangles, this results in very large files. Further, this means the meshes are either slow to load or appear to have a faceted jagged appearance.
 

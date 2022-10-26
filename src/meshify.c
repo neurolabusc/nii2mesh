@@ -13,6 +13,8 @@
 	#include <zlib.h>
 	#ifdef HAVE_JSON
 		#include "cJSON.h"
+		#define FIND_JSON_KEY(id,parent,fallback,val) \
+			((tmp=cJSON_GetObjectItem(root,id))==0 ? fallback : tmp->val)
 	#endif
 #endif
 #include "meshify.h"
@@ -365,7 +367,7 @@ int meshify(float * img, size_t dim[3], int originalMC, float isolevel, vec3i **
 	//printf("Bounding box for bright voxels: %d..%d %d..%d %d..%d\n", lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
 	for (int i=0;i<3;i++) {
 		lo[i] = MAX(lo[i] - 1, 0);
-		hi[i] = MIN(hi[i] + 2, dim[i]);
+		hi[i] = MIN(hi[i] + 2, dim[i]-1);
 	}
 	double startTimeMC = clockMsec();
 	vec3d *pts = NULL;
@@ -405,6 +407,25 @@ void swap_4bytes( size_t n , void *ar ) { // 4 bytes at a time
 	return ;
 }
 
+void swap_8bytes( size_t n , void *ar )    // 8 bytes at a time
+{
+    size_t ii ;
+    unsigned char * cp0 = (unsigned char *)ar, * cp1, * cp2 ;
+    unsigned char tval ;
+    for( ii=0 ; ii < n ; ii++ ){
+        cp1 = cp0; cp2 = cp0+7;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp1++;  cp2--;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp1++;  cp2--;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp1++;  cp2--;
+        tval = *cp1;  *cp1 = *cp2;  *cp2 = tval;
+        cp0 += 8;
+    }
+    return ;
+}
+
 typedef struct {
 	float x,y,z;
 } vec3s; //single precision (float32)
@@ -427,7 +448,7 @@ int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 	fwrite(s, strlen(s), 1, fp);
 	int32_t VertexCount = npt;
 	int32_t FaceCount = ntri;
-	if ( &littleEndianPlatform) {
+	if (littleEndianPlatform()) {
 		swap_4bytes(1, &VertexCount);
 		swap_4bytes(1, &FaceCount);
 	}
@@ -436,11 +457,11 @@ int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 	vec3s *pts32 = (vec3s *) malloc(npt * sizeof(vec3s));
 	for (int i = 0; i < npt; i++) //double->single precision
 		pts32[i] = vec3d2vec4s(pts[i]);
-	if (&littleEndianPlatform)
+	if (littleEndianPlatform())
 		swap_4bytes(npt * 3, pts32);
 	fwrite(pts32, npt * sizeof(vec3s), 1, fp);
 	free(pts32);
-	if (&littleEndianPlatform) {
+	if (littleEndianPlatform()) {
 		vec3i *trisSwap = (vec3i *) malloc(ntri * sizeof(vec3i));
 		for (int i = 0; i < ntri; i++)
 			trisSwap[i] = tris[i];
@@ -454,7 +475,6 @@ int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 }
 
 #ifdef HAVE_ZLIB
-#ifdef HAVE_JSON
 
 enum TZipMethod {zmZlib, zmGzip, zmBase64, zmLzip, zmLzma, zmLz4, zmLz4hc};
 
@@ -472,10 +492,15 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 		if(zipid==zmBase64){
 			/** base64 encoding  */
 			*outputbuf=base64_encode((const unsigned char*)inputstr, inputsize, outputsize);
-		}else if(zipid==zmZlib){
+		}else if(zipid==zmZlib || zipid==zmGzip){
 			/** zlib (.zip) or gzip (.gz) compression  */
-			if(deflateInit(&zs,  (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress)) != Z_OK)
-				return -2;
+			if(zipid==zmZlib){
+				if(deflateInit(&zs,  (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress)) != Z_OK)
+					return -2;
+			}else{
+				if(deflateInit2(&zs, (iscompress>0) ? Z_DEFAULT_COMPRESSION : (-iscompress), Z_DEFLATED, 15|16, MAX_MEM_LEVEL, Z_DEFAULT_STRATEGY) != Z_OK)
+					return -2;
+			}
 			buflen[0] =deflateBound(&zs,inputsize);
 			*outputbuf=(unsigned char *)malloc(buflen[0]);
 			zs.avail_in = inputsize; /* size of input, string + terminator*/
@@ -495,12 +520,16 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 		if(zipid==zmBase64){
 			/** base64 decoding  */
 			*outputbuf=base64_decode((const unsigned char*)inputstr, inputsize, outputsize);
-		}else if(zipid==zmZlib){
+		}else if(zipid==zmZlib || zipid==zmGzip){
 			/** zlib (.zip) or gzip (.gz) decompression */
 			int count=1;
-			if(zipid==zmZlib)
+			if(zipid==zmZlib){
 				if(inflateInit(&zs) != Z_OK)
 					return -2;
+			}else{
+				if(inflateInit2(&zs, 15|32) != Z_OK)
+					return -2;
+			}
 			buflen[0] =inputsize*20;
 			*outputbuf=(unsigned char *)malloc(buflen[0]);
 			zs.avail_in = inputsize; /* size of input, string + terminator*/
@@ -525,35 +554,273 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 	return 0;
 }
 
-int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+#ifdef HAVE_JSON
+
+const char *zipformat[]={"zlib","gzip","base64","lzip","lzma","lz4","lz4hc",""};
+
+int key_lookup(char *origkey, const char *table[]){
+	int i=0;
+	while(table[i] && table[i][0]!='\0'){
+		if(strcmp(origkey,table[i])==0)
+			return i;
+		i++;
+	}
+	return -1;
+}
+
+// decoding JData ND array construct {"_ArraySize_":,"_ArrayType_":"_ArrayZipType_":"_ArrayZipSize_":"_ArrayZipData_":}
+
+int  jdata_decode(void **vol, unsigned short *ndim, unsigned short *dims, int maxdim, char **type, cJSON *obj){
+	int ret=0;
+	cJSON * ztype=NULL;
+	cJSON * vsize=cJSON_GetObjectItem(obj,"_ArraySize_");
+	cJSON * vtype=cJSON_GetObjectItem(obj,"_ArrayType_");
+	cJSON * vdata=cJSON_GetObjectItem(obj,"_ArrayData_");
+	if(!vdata){
+		ztype=cJSON_GetObjectItem(obj,"_ArrayZipType_");
+		vdata=cJSON_GetObjectItem(obj,"_ArrayZipData_");
+	}
+	if(vtype)
+		*type=vtype->valuestring;
+	if(vdata){
+		if(vsize){
+			cJSON *tmp=vsize->child;
+			*ndim=cJSON_GetArraySize(vsize);
+			for(int i=0;i<MIN(maxdim,*ndim);i++){
+				dims[i]=tmp->valueint;
+				tmp=tmp->next;
+			}
+		}
+		if(ztype){
+			size_t len, newlen;
+			int status=0;
+			char *buf=NULL;
+			int zipid=key_lookup((char *)(ztype->valuestring),zipformat);
+			if(zipid<0 ||zipid>zmBase64)
+				 return -1;
+			if(zipid==zmBase64)
+				return zmat_run(strlen(vdata->valuestring), (unsigned char *)vdata->valuestring, &len, (unsigned char **)vol, zmBase64, &status, 0);
+			else
+				ret=zmat_run(strlen(vdata->valuestring), (unsigned char *)vdata->valuestring, &len, (unsigned char **)&buf, zmBase64, &status, 0);
+			if(!ret && vsize){
+				if(*vol)
+					free(*vol);
+				ret=zmat_run(len, (unsigned char *)buf, &newlen, (unsigned char **)(vol), zipid, &status, 0);
+			}
+			if(buf)
+				free(buf);
+		}else
+			return -1;
+        }else
+		 return -1;
+	return ret;
+}
+
+void read_vec4float(float *vec4, cJSON *vec){
+	for(int i=0;i<4;i++){
+		vec4[i]=vec->valuedouble;
+		vec=vec->next;
+	}
+}
+
+void array3d_row2col(float **vol, unsigned short *dim){
+	unsigned int x,y,z;
+	unsigned int dimxy,dimyz;
+	float *newvol=NULL;
+
+	if(*vol==NULL || dim[0]==0 || dim[1]==0 || dim[2]==0){
+		return;
+	}
+	newvol=(float *)malloc(sizeof(float)*dim[0]*dim[1]*dim[2]);
+	dimxy=dim[0]*dim[1];
+	dimyz=dim[1]*dim[2];
+	for(x=0;x<dim[0];x++)
+		for(y=0;y<dim[1];y++)
+			for(z=0;z<dim[2];z++){
+				newvol[z*dimxy+y*dim[0]+x]=(*vol)[x*dimyz+y*dim[2]+z];
+			}
+	free(*vol);
+	*vol=newvol;
+}
+
+// parsing a JSON/JNIfTI-encoded jnii volume file
+
+float * load_jnii(const char *fnm, nifti_1_header * hdr) {
+	char *jbuf;
+	int len;
+	float * img32=NULL;
+	cJSON *root, *jniihead, *jniidata, *tmp;
+
+	// reading JNIfTI/JSON file to a string
+	FILE *fp=fopen(fnm,"rb");
+	if(!fp){
+		printf("Unable to open the specified file %s\n", fnm);
+		return NULL;
+	}
+	fseek (fp, 0, SEEK_END);
+	len=ftell(fp)+1;
+	jbuf=(char *)malloc(len);
+	rewind(fp);
+	if(fread(jbuf,len-1,1,fp)!=1)
+		return NULL;
+	jbuf[len-1]='\0';
+	fclose(fp);
+
+	// parse JNIfTI/JSON file
+	root = cJSON_Parse(jbuf);
+
+	if(!root){ // if not a valid JSON file, print error and return
+		char *ptrold, *ptr=(char*)cJSON_GetErrorPtr();
+		if(ptr) ptrold=strstr(jbuf,ptr);
+		if(fp!=NULL) fclose(fp);
+		if(ptr && ptrold){
+			char *offs=(ptrold-jbuf>=50) ? ptrold-50 : jbuf;
+			while(offs<ptrold){
+				fprintf(stderr,"%c",*offs);
+				offs++;
+			}
+			fprintf(stderr,"<error>%.50s\n",ptrold);
+		}
+		if(fp!=NULL)
+			free(jbuf);
+		return NULL;
+	}
+	free(jbuf);
+
+	jniihead = cJSON_GetObjectItem(root,"NIFTIHeader");
+	jniidata = cJSON_GetObjectItem(root,"NIFTIData");
+	memset(hdr, 0, sizeof(nifti_1_header));
+	if(jniihead){
+		hdr->sizeof_hdr=FIND_JSON_KEY("NIIHeaderSize",jniihead,348,valueint);
+		hdr->scl_slope=FIND_JSON_KEY("ScaleSlope",jniihead,1.0,valuedouble);
+		hdr->scl_inter=FIND_JSON_KEY("ScaleOffset",jniihead,0.0,valuedouble);
+		tmp=cJSON_GetObjectItem(jniihead,"Affine");
+		if(tmp && cJSON_IsArray(tmp) && cJSON_GetArraySize(tmp)==3){
+			cJSON *row=tmp->child;
+			cJSON *elem=row->child;
+			read_vec4float(hdr->srow_x, elem);
+			elem=row->next->child;
+			read_vec4float(hdr->srow_y, elem);
+			elem=row->next->next->child;
+			read_vec4float(hdr->srow_z, elem);
+		}else{
+			hdr->srow_x[0]=1.f;
+			hdr->srow_y[1]=1.f;
+			hdr->srow_z[2]=1.f;
+		}
+	}else
+		return NULL;
+
+	if(jniidata){
+		char *type=NULL;
+		void *imgRaw=NULL;
+
+		tmp=cJSON_GetObjectItem(jniidata, "_ArrayType_");
+		if(!tmp)
+			return NULL;
+
+		if(jdata_decode((void **)&imgRaw, (unsigned short *)hdr->dim, (unsigned short *)hdr->dim+1, 3, &type, jniidata)!=0){
+			if(imgRaw)
+				free(imgRaw);
+			return NULL;
+		}
+		int nvox = hdr->dim[1]*hdr->dim[2]*hdr->dim[3];
+		img32 = (float *) malloc(nvox*sizeof(float));
+		if(strcmp(type,"uint8")==0){
+			for(int i=0; i< nvox; i++)
+				img32[i]=((unsigned char *)imgRaw)[i];
+		}else if(strcmp(type,"int8")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((char *)imgRaw)[i];
+		}else if(strcmp(type,"uint16")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((unsigned short *)imgRaw)[i];
+		}else if(strcmp(type,"int16")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((short *)imgRaw)[i];
+		}else if(strcmp(type,"uint32")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((unsigned int *)imgRaw)[i];
+		}else if(strcmp(type,"int32")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((int *)imgRaw)[i];
+		}else if(strcmp(type,"uint64")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((long long *)imgRaw)[i];
+		}else if(strcmp(type,"int64")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((unsigned long long *)imgRaw)[i];
+		}else if(strcmp(type,"double")==0){
+			for(int i=0; i<nvox; i++)
+				img32[i]=((double *)imgRaw)[i];
+		}else if(strcmp(type,"single")==0){
+			memcpy(img32, imgRaw, nvox*sizeof(float));
+		}else{
+			if(imgRaw)
+				free(imgRaw);
+			return NULL;
+		}
+		if(imgRaw)
+			free(imgRaw);
+
+		tmp=cJSON_GetObjectItem(jniidata, "_ArrayOrder_");
+		if(!tmp || (cJSON_IsString(tmp) && ((tmp->valuestring)[0]=='r' || (tmp->valuestring)[0]=='R')))
+			array3d_row2col(&img32, (unsigned short *)hdr->dim+1);
+	}else
+		return NULL;
+	cJSON_Delete(root);
+	return img32;
+}
+#endif // HAVE_JSON
+
+int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isdouble){
 	FILE *fp;
-	cJSON *root=NULL, *hdr=NULL, *node=NULL, *face=NULL;
-	char *jsonstr=NULL;
-	int dim[2]={0,3}, len[2]={1,0};
+	const char *pyparsers[]={"https://pypi.org/project/jdata","https://pypi.org/project/bjdata"};
+	const char *jsparsers[]={"https://www.npmjs.com/package/jda","https://www.npmjs.com/package/bjd"};
+	const char *cparsers[]={"https://github.com/DaveGamble/cJSON","https://github.com/NeuroJSON/ubj"};
 	size_t compressedbytes, totalbytes;
 	unsigned char *compressed=NULL, *buf=NULL;
 	int ret=0, status=0;
-	root=cJSON_CreateObject();
-	cJSON_AddItemToObject(root,  "_DataInfo_", hdr = cJSON_CreateObject());
-	cJSON_AddStringToObject(hdr, "JMeshVersion", "0.5");
-	cJSON_AddStringToObject(hdr, "Comment", "Created by nii2mesh");
-	cJSON_AddItemToObject(root,  "MeshVertex3", node = cJSON_CreateObject());
-	cJSON_AddStringToObject(node,"_ArrayType_","double");
-	dim[0]=npt;
-	cJSON_AddItemToObject(node,  "_ArraySize_",cJSON_CreateIntArray(dim,2));
-	cJSON_AddStringToObject(node,"_ArrayZipType_","zlib");
-	len[1]=dim[0]*dim[1];
-	cJSON_AddItemToObject(node,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
-	totalbytes=dim[0]*dim[1]*sizeof(pts[0].x);
-	unsigned int *val=(unsigned int *)malloc(totalbytes);
- 	memcpy(val,&(tris[0].x),totalbytes);
- 	for(int i=0;i<len[1];i++)
- 		val[i]++;
- 	ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
- 	free(val);
+
+	float *floatpts=NULL;
+	if(!isdouble){
+		floatpts=(float *)malloc(npt*3*sizeof(float));
+		for(int i=0; i<npt; i++){
+			floatpts[i*3]=pts[i].x;
+			floatpts[i*3+1]=pts[i].y;
+			floatpts[i*3+2]=pts[i].z;
+		}
+	}
+
+	fp=fopen(fnm,"wt");
+	if(fp==NULL)
+		return EXIT_FAILURE;
+
+	fprintf(fp, "{\n\t\"_DataInfo_\":{\n");
+	fprintf(fp, "\t\t\"JMeshVersion\":\"0.5\",\n");
+	fprintf(fp, "\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (https://neurojson.org)\",\n");
+	fprintf(fp, "\t\t\"AnnotationFormat\":\"https://neurojson.org/jmesh/draft1\",\n");
+	fprintf(fp, "\t\t\"SerialFormat\":\"https://json.org\",\n");
+	fprintf(fp, "\t\t\"Parser\":{\n");
+	fprintf(fp, "\t\t\t\"Python\":[\"%s\",\t\"%s\"],\n",pyparsers[0],pyparsers[1]);
+	fprintf(fp, "\t\t\t\"MATLAB\":\"https://github.com/NeuroJSON/jsonlab\",\n");
+	fprintf(fp, "\t\t\t\"JavaScript\":[\"%s\",\t\"%s\"],\n",jsparsers[0],jsparsers[1]);
+	fprintf(fp, "\t\t\t\"CPP\":\"https://github.com/NeuroJSON/json\",\n");
+	fprintf(fp, "\t\t\t\"C\":[\"%s\",\t\"%s\"]\n",cparsers[0],cparsers[1]);
+	fprintf(fp, "\t\t}\n\t},\n");
+	fprintf(fp, "\t\"MeshVertex3\":{\n");
+	fprintf(fp, "\t\t\"_ArrayType_\":\"%s\",\n", (isdouble ? "double" : "single"));
+	fprintf(fp, "\t\t\"_ArraySize_\":[%d, 3],\n", npt);
+	fprintf(fp, "\t\t\"_ArrayZipType_\":\"zlib\",\n");
+	fprintf(fp, "\t\t\"_ArrayZipSize_\":[1, %d],\n", npt*3);
+
+	totalbytes=npt*3*(isdouble ? sizeof(pts[0].x) : sizeof(float));
+	ret=zmat_run(totalbytes, (isdouble ? (unsigned char *)&(pts[0].x) : (unsigned char *)floatpts), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
 	if(!ret){
-		 ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
-		 cJSON_AddStringToObject(node,  "_ArrayZipData_",(char *)buf);
+		ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
+		fprintf(fp, "\t\t\"_ArrayZipData_\":\"");
+		fwrite(buf, 1, totalbytes, fp);
+		fprintf(fp, "\"\n");
 	}
 	if(compressed){
 		free(compressed);
@@ -563,49 +830,232 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 		free(buf);
 		buf=NULL;
 	}
-	cJSON_AddItemToObject(root,  "MeshTri3", face = cJSON_CreateObject());
-	cJSON_AddStringToObject(face,"_ArrayType_","uint32");
-	dim[0]=ntri;
-	cJSON_AddItemToObject(face,  "_ArraySize_",cJSON_CreateIntArray(dim,2));
-	cJSON_AddStringToObject(face,"_ArrayZipType_","zlib");
-	len[1]=dim[0]*dim[1];
-	cJSON_AddItemToObject(face,  "_ArrayZipSize_",cJSON_CreateIntArray(len,2));
-	totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
-	ret=zmat_run(totalbytes, (unsigned char *)&(tris[0].x), &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	fprintf(fp, "\t},\n");
+	fprintf(fp, "\t\"MeshTri3\":{\n");
+	fprintf(fp, "\t\t\"_ArrayType_\":\"uint32\",\n");
+	fprintf(fp, "\t\t\"_ArraySize_\":[%d, 3],\n", ntri);
+	fprintf(fp, "\t\t\"_ArrayZipType_\":\"zlib\",\n");
+	fprintf(fp, "\t\t\"_ArrayZipSize_\":[1, %d],\n", ntri*3);
+
+	totalbytes=ntri*3*sizeof(tris[0].x);
+	unsigned int *val=(unsigned int *)malloc(totalbytes);
+	memcpy(val,&(tris[0].x),totalbytes);
+	for(int i=0;i<ntri*3;i++)
+		val[i]++;
+	ret=zmat_run(totalbytes, (unsigned char *)val, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+	free(val);
 	if(!ret){
 		ret=zmat_run(compressedbytes, compressed, &totalbytes, (unsigned char **)&buf, zmBase64, &status,1);
-		cJSON_AddStringToObject(face,  "_ArrayZipData_",(char *)buf);
+		fprintf(fp, "\t\t\"_ArrayZipData_\":\"");
+		fwrite(buf, 1, totalbytes, fp);
+		fprintf(fp, "\"\n");
 	}
 	if(compressed)
 		free(compressed);
 	if(buf)
 		free(buf);
-	jsonstr=cJSON_Print(root);
-	if(jsonstr==NULL)
-		return EXIT_FAILURE;
-	fp=fopen(fnm,"wt");
-	if(fp==NULL)
-		return EXIT_FAILURE;
-	fprintf(fp,"%s\n",jsonstr);
+	if(floatpts)
+		free(floatpts);
+
+	fprintf(fp, "\t}\n}\n");
 	fclose(fp);
-	if(jsonstr)
-		free(jsonstr);
-	if(root)
-		cJSON_Delete(root);
 	return EXIT_SUCCESS;
 }
-#endif //HAVE_JSON
+
+void write_ubjsonint(int len, int *dat, FILE *fp){
+	if (!littleEndianPlatform())
+		swap_4bytes(len, dat);
+	fwrite(dat,len,4,fp);
+}
+
+void write_ubjsonfloat(int len, float *dat, FILE *fp){
+	if (!littleEndianPlatform())
+		swap_4bytes(len, dat);
+	fwrite(dat,len,4,fp);
+}
+
+void write_ubjsondouble(int len, double *dat, FILE *fp){
+	if (!littleEndianPlatform())
+		swap_8bytes(len, dat);
+	fwrite(dat,len,8,fp);
+}
+
+int save_bmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz, bool isdouble){
+	int markerlen=0;
+	const char *output[]={
+	"{",
+		"N","","_DataInfo_","{",
+			"N","","JMeshVersion","S","","0.5",
+			"N","","Comment","S","","Created by nii2mesh with NeuroJSON Binay JMesh format (https://neurojson.org)",
+			"N","","AnnotationFormat","S","","https://neurojson.org/jmesh/draft1",
+			"N","","SerialFormat","S","","https://neurojson.org/bjdata/draft2",
+			"N","","Parser","{",
+				"N","","Python","[",
+					"S","","https://pypi.org/project/jdata",
+					"S","","https://pypi.org/project/bjdata",
+				"]",
+				"N","","MATLAB","S","","https://github.com/NeuroJSON/jsonlab",
+				"N","","JavaScript","[",
+					"S","","https://www.npmjs.com/package/jda",
+					"S","","https://www.npmjs.com/package/bjd",
+				"]",
+				"N","","CPP","S","","https://github.com/NeuroJSON/json",
+				"N","","C","[",
+					"S","","https://github.com/DaveGamble/cJSON",
+					"S","","https://github.com/NeuroJSON/ubj",
+				"]",
+			"}",
+		"}",
+		"N","","MeshVertex3","?1",
+			"N","","_ArrayType_","S","",(isdouble)?"double":"single",
+			"N","","_ArraySize_","[$l#U\x2","?2",
+			"N","","_ArrayZipType_","S","","zlib",
+			"N","","_ArrayZipSize_","[$l#U\x1","?3",
+			"N","","_ArrayZipData_","S","","?4",
+		"}",
+		"N","","MeshTri3","{",
+			"N","","_ArrayType_","S","","uint32",
+			"N","","_ArraySize_","[$l#U\x2","?5",
+			"N","","_ArrayZipType_","S","","zlib",
+			"N","","_ArrayZipSize_","[$l#U\x1","?6",
+			"N","","_ArrayZipData_","S","","?7",
+		"}",
+	"}"
+	};
+
+	float *floatpts=NULL;
+	if(!isdouble){
+		floatpts=(float *)malloc(npt*3*sizeof(float));
+		for(int i=0; i<npt; i++){
+			floatpts[i*3]=pts[i].x;
+			floatpts[i*3+1]=pts[i].y;
+			floatpts[i*3+2]=pts[i].z;
+		}
+	}
+	unsigned int *newtris=(unsigned int *)malloc(ntri*3*sizeof(unsigned int));
+	memcpy(newtris,&(tris[0].x),ntri*3*sizeof(unsigned int));
+	for(int i=0;i<ntri*3;i++)
+		newtris[i]++;
+
+	FILE *fp = fopen(fnm,"wb");
+	if (fp == NULL)
+		return EXIT_FAILURE;
+
+	markerlen=sizeof(output)/sizeof(char*);
+
+	for(int i=0;i<markerlen;i++){
+		int slen=strlen(output[i]);
+		if(slen>0 && output[i][0]!='?'){
+			if(!(slen==1 && output[i][0]=='N'))
+				fwrite(output[i],1,slen,fp);
+			if(slen==1 && (output[i][0]=='N' || output[i][0]=='S') && i+2<markerlen && output[i+1][0]=='\0' && output[i+2][0]!='?'){
+				unsigned int keylen=strlen(output[i+2]);
+				if(keylen<256){
+					unsigned char keylenbyte=keylen;
+					fputc('U',fp);
+					fwrite(&keylenbyte,1,sizeof(keylenbyte),fp);
+				}else{
+					fputc('l',fp);
+					write_ubjsonint(1,(int *)(&keylen),fp);
+				}
+			}
+		}else{
+			if(slen>0){
+				int slotid=0;
+				if(sscanf(output[i],"\?%d",&slotid)==1 && slotid>0){
+					unsigned char *compressed=NULL;
+					size_t compressedbytes, totalbytes;
+					int dim[2]={0,3};
+					int ret=0, status=0;
+					switch(slotid){
+						case 1: {
+							if(isGz){
+								fputc('{',fp);
+							}else{ // write node and face data in BJData strongly-typed ND array construct
+								int val[2]={0};
+								val[0]=npt;
+								val[1]=3;
+
+								fwrite("[$", 1, 2, fp);
+								fputc(isdouble ? 'D' : 'd', fp);
+								fwrite("#[$l#U\x02", 1, 7, fp);
+								write_ubjsonint(2,val,fp);
+								if(isdouble)
+									write_ubjsondouble(npt*3, &(pts[0].x), fp);
+								else
+									write_ubjsonfloat(npt*3, floatpts, fp);
+
+								val[0]=ntri;
+								fwrite("U\x08MeshTri3[$l#[$l#U\x02", 1, 20, fp);
+								write_ubjsonint(2, val, fp);
+								write_ubjsonint(ntri*3, (int *)newtris, fp);
+								fputc('}', fp);
+							}
+							break;
+						}
+						case 2: {int val[2]; val[0]=npt; val[1]=3; write_ubjsonint(2,val,fp);break;}
+						case 3: {int val=npt*3;	write_ubjsonint(1,&val,fp);break;}
+						case 4:
+							dim[0]=npt;
+
+							totalbytes=dim[0]*dim[1]*(isdouble? sizeof(pts[0].x) : sizeof(float));
+							ret=zmat_run(totalbytes, (isdouble ? (unsigned char *)&(pts[0].x) : (unsigned char *)floatpts) , &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+							if(!ret){
+								int clen=compressedbytes;
+								fputc('l',fp);
+								write_ubjsonint(1,&clen,fp);
+								fwrite(compressed,1,compressedbytes,fp);
+							}
+							if(compressed)
+								free(compressed);
+							break;
+						case 5: {int val[2]; val[0]=ntri;val[1]=3; write_ubjsonint(2,val,fp);break;}
+						case 6: {int val=ntri*3; write_ubjsonint(1,&val,fp);break;}
+						case 7:
+							dim[0]=ntri;
+							totalbytes=dim[0]*dim[1]*sizeof(tris[0].x);
+							ret=zmat_run(totalbytes, (unsigned char *)newtris, &compressedbytes, (unsigned char **)&compressed, zmZlib, &status,1);
+							if(!ret){
+								int clen=compressedbytes;
+								fputc('l',fp);
+								write_ubjsonint(1,&clen,fp);
+								fwrite(compressed,1,compressedbytes,fp);
+							}
+
+							if(compressed)
+								free(compressed);
+							break;
+					}
+					if(slotid==1 && !isGz)
+						break;
+				}
+			}
+		}
+	}
+	fclose(fp);
+
+	free(newtris);
+	if(floatpts)
+		free(floatpts);
+
+	return EXIT_SUCCESS;
+}
 #endif //HAVE_ZLIB
 
-int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isdouble){
 	FILE *fp = fopen(fnm,"w");
 	if (fp == NULL)
 		return EXIT_FAILURE;
 	fprintf(fp,"{\n");
-	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh\"\n\t},\n");
+	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh with NeuroJSON JMesh format (https://neurojson.org)\"\n\t},\n");
 	fprintf(fp,"\t\"MeshVertex3\":[\n");
-	for (int i=0;i<npt;i++)
-		fprintf(fp, "[%g,\t%g,\t%g],\n", pts[i].x, pts[i].y,pts[i].z);
+        if(isdouble){
+                for (int i=0;i<npt;i++)
+                        fprintf(fp, "[%.16g,\t%.16g,\t%.16g],\n", pts[i].x, pts[i].y,pts[i].z);
+        }else{
+                for (int i=0;i<npt;i++)
+                        fprintf(fp, "[%.7g,\t%.7g,\t%.7g],\n", pts[i].x, pts[i].y,pts[i].z);
+        }
 	fprintf(fp,"\t],\n\t\"MeshTri3\":[\n");
 	for (int i=0;i<ntri;i++)
 		fprintf(fp, "[%d,\t%d,\t%d],\n", tris[i].x+1, tris[i].y+1, tris[i].z+1);
@@ -635,11 +1085,11 @@ int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	h.NFACE = ntri;
 	h.NVERT = npt;
 	h.NSKIP = 0;
-	if (! &littleEndianPlatform)
+	if (!littleEndianPlatform())
 		swap_4bytes(3, &h.NFACE);
-	FILE *fp;
+	FILE *fp=NULL;
 	#ifdef HAVE_ZLIB
-	gzFile fgz;
+	gzFile fgz=NULL;
 	if (isGz) {
 		fgz = gzopen(fnm, "w");
 		if (! fgz)
@@ -653,7 +1103,7 @@ int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 			return EXIT_FAILURE;
 		fwrite(&h, sizeof(struct mz3hdr), 1, fp);
 	}
-	if (! &littleEndianPlatform) {
+	if (!littleEndianPlatform()) {
 		vec3i *trisSwap = (vec3i *) malloc(ntri * sizeof(vec3i));
 		for (int i = 0; i < ntri; i++)
 			trisSwap[i] = tris[i];
@@ -677,7 +1127,7 @@ int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	vec3s *pts32 = (vec3s *) malloc(npt * sizeof(vec3s));
 	for (int i = 0; i < npt; i++) //double->single precision
 		pts32[i] = vec3d2vec4s(pts[i]);
-	if (! &littleEndianPlatform)
+	if (!littleEndianPlatform())
 		swap_4bytes(npt * 3, pts32);
 	#ifdef HAVE_ZLIB
 	if (isGz) {
@@ -775,7 +1225,7 @@ int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	if (fp == NULL)
 		return EXIT_FAILURE;
 	fputs("ply\n",fp);
-	if (&littleEndianPlatform)
+	if (littleEndianPlatform())
 		fputs("format binary_little_endian 1.0\n",fp);
 	else
 		fputs("format binary_big_endian 1.0\n",fp);
@@ -841,7 +1291,7 @@ int save_gii(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	else
 	#endif
 		fputs("               Encoding=\"Base64Binary\"\n" ,fp);
-	if (&littleEndianPlatform)
+	if (littleEndianPlatform())
 		fputs("               Endian=\"LittleEndian\"\n",fp);
 	else
 		fputs("               Endian=\"BigEndian\"\n",fp);
@@ -883,7 +1333,7 @@ int save_gii(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	else
 	#endif
 		fputs("               Encoding=\"Base64Binary\"\n" ,fp);
-	if (&littleEndianPlatform)
+	if (littleEndianPlatform())
 		fputs("               Endian=\"LittleEndian\"\n",fp);
 	else
 		fputs("               Endian=\"BigEndian\"\n",fp);
@@ -942,7 +1392,7 @@ int save_vtk(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	vec3s *pts32 = (vec3s *) malloc(npt * sizeof(vec3s));
 	for (int i = 0; i < npt; i++)//double->single precision
 		pts32[i] = vec3d2vec4s(pts[i]);
-	if (&littleEndianPlatform)
+	if (littleEndianPlatform())
 		swap_4bytes(3*npt, pts32);
 	fwrite(pts32, npt * sizeof(vec3s), 1, fp);
 	free(pts32);
@@ -956,7 +1406,7 @@ int save_vtk(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 		tris4[i].y = tris[i].y;
 		tris4[i].z = tris[i].z;
 	}
-	if (&littleEndianPlatform)
+	if (littleEndianPlatform())
 		swap_4bytes(4*ntri, tris4);
 	fwrite(tris4, ntri * sizeof(vec4i), 1, fp);
 	free(tris4);
@@ -975,7 +1425,7 @@ void strip_ext(char *fname){
 	}
 }
 
-int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz){
+int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz, bool isdouble){
 	char basenm[768], ext[768] = "";
 	strcpy(basenm, fnm);
 	strip_ext(basenm); // ~/file.nii -> ~/file
@@ -986,13 +1436,13 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	else if ((strstr(ext, ".inflated")) || (strstr(ext, ".pial")))
 		return save_freesurfer(fnm, tris, pts, ntri, npt);
 #ifdef HAVE_ZLIB
-#ifdef HAVE_JSON
 	else if (strstr(ext, ".jmsh"))
-		return save_jmsh(fnm, tris, pts, ntri, npt);
-#endif //HAVE_JSON
+		return save_jmsh(fnm, tris, pts, ntri, npt, isdouble);
+	else if (strstr(ext, ".bmsh"))
+		return save_bmsh(fnm, tris, pts, ntri, npt, isGz, isdouble);
 #endif //HAVE_ZLIB
 	else if (strstr(ext, ".json"))
-		return save_json(fnm, tris, pts, ntri, npt);
+		return save_json(fnm, tris, pts, ntri, npt, isdouble);
 	else if (strstr(ext, ".mz3"))
 		return save_mz3(fnm, tris, pts, ntri, npt, isGz);
 	else if (strstr(ext, ".off"))
