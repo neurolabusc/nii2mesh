@@ -266,7 +266,7 @@ double clockMsec() { //return milliseconds since midnight
 	clock_t t = clock();
 	return (double)((double)t) / (CLOCKS_PER_SEC / 1000.0);
 #else
-	#ifdef __MINGW32__
+	#ifdef __MINGW32__ //issue 4
 		time_t seconds_since_midnight = time(NULL) % 86400;
 		return seconds_since_midnight;
 	#else
