@@ -1,5 +1,10 @@
-// gcc -O3 -DHAVE_ZLIB obj2mesh.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o obj2mesh -lz -lm
+// gcc -O3 -DNII2MESH -DHAVE_ZLIB MarchingCubes.c obj2mesh.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o obj2mesh -lz -lm
 // obj2mesh dragon.obj reduced.obj
+//
+//For debugging ()
+//gcc  -O1 -g -fsanitize=address -fno-omit-frame-pointer   -DNII2MESH -DHAVE_ZLIB MarchingCubes.c obj2mesh.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o obj2mesh -lz -lm
+// obj2mesh -t 3749 -v 2 sphere.obj smoother.obj
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -72,6 +77,7 @@ int main(int argc,char **argv) {
 	double reduceFraction = 0.5;
 	int smoothIter = 0;
 	int quality = 1;
+	int target_count = 0;
 	bool verbose = false;
 	if (argc < 3) {
 		printf("Converts a NIfTI voxelwise image to triangulated mesh.\n");
@@ -80,6 +86,7 @@ int main(int argc,char **argv) {
 		printf("    -q v    quality (0=lossy, 1=lossy then losslesss, default %d)\n", quality);
 		printf("    -r v    reduction factor (default %g)\n", reduceFraction);
 		printf("    -s v    smoothing iterations (default %d)\n", smoothIter);
+		printf("    -t v    target count (unused by default overrides reduction factor)\n");
 		printf("    -v v    verbose (0=silent, 1=verbose, default %d)\n", verbose);
 		printf("mesh extension sets format (.gii, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
 		printf("Example: '%s dragon.obj small.obj'\n",argv[0]);
@@ -94,6 +101,8 @@ int main(int argc,char **argv) {
 			reduceFraction = atof(argv[i+1]);
 		if (strcmp(argv[i],"-s") == 0)
 			smoothIter = atoi(argv[i+1]);
+		if (strcmp(argv[i],"-t") == 0)
+			target_count = atoi(argv[i+1]);
 		if (strcmp(argv[i],"-v") == 0)
 			verbose = atoi(argv[i+1]);
 	}
@@ -104,7 +113,8 @@ int main(int argc,char **argv) {
 	read_obj(argv[argc-2], &verts, &tris, &nvert, &ntri);
 	int startTri = ntri;
 	int startVert = nvert;
-	int target_count = round((float)ntri * reduceFraction);
+	if (target_count <= 0)
+		target_count = round((float)ntri * reduceFraction);
 	double startTime = clockMsec();
 	if (smoothIter > 0) {
 		laplacian_smoothHC(verts, tris, nvert, ntri, 0.1, 0.5, smoothIter, true);

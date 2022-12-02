@@ -419,7 +419,7 @@ void quadric_simplify_mesh(vec3d **vs, vec3i **ts, int* nvert, int *ntri, int ta
 	}
 	free(*ts);
 	int nref = 0;
-	struct TRef* refs = (struct TRef*) malloc(*ntri * 6 * sizeof(struct TRef)); //overprovision initially *ntri * 3, allow room for growth
+	struct TRef* refs = (struct TRef*) malloc(*ntri * 9 * sizeof(struct TRef)); //overprovision initially *ntri * 3, allow room for growth
 	//init other structures
 	bool* deleted0 = (bool*) malloc(*ntri * 3 * sizeof(bool)); //overprovision so we never need to realloc
 	bool* deleted1 = (bool*) malloc(*ntri * 3 * sizeof(bool)); //overprovision so we never need to realloc
