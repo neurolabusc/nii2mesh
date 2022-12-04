@@ -22,6 +22,8 @@
 
 void read_obj(const char* filename, vec3d **verts, vec3i **tris, int* nvert, int* ntri){
 	//printf ( "Loading Objects %s ... \n",filename);
+	*ntri = 0;
+	*nvert = 0;
 	FILE* fn;
 	if(filename==NULL) return ;
 	if((char)filename[0]==0) return ;
@@ -29,11 +31,9 @@ void read_obj(const char* filename, vec3d **verts, vec3i **tris, int* nvert, int
 		printf ( "File %s not found!\n" ,filename );
 		return;
 	}
-	*ntri = 0;
 	int tCapacity = 65536 * 16;
 	*tris = (vec3i *) malloc(tCapacity * sizeof(vec3i));
 	vec3i *ts = *tris;
-	*nvert = 0;
 	int vCapacity = 65536 * 16;
 	*verts = (vec3d *) malloc(vCapacity * sizeof(vec3d));
 	vec3d *vs = *verts;
@@ -111,6 +111,8 @@ int main(int argc,char **argv) {
 	int nvert;
 	int ntri;
 	read_obj(argv[argc-2], &verts, &tris, &nvert, &ntri);
+	if ((nvert < 4) || (ntri < 2))
+		exit(1);
 	int startTri = ntri;
 	int startVert = nvert;
 	if (target_count <= 0)
