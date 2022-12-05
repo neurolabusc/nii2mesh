@@ -435,7 +435,7 @@ void quadric_simplify_mesh(vec3d **vs, vec3i **ts, int* nvert, int *ntri, int ta
 		lossy = false;
 		max_iter = 1000;
 	}
-	int iterationStartCount;
+	int iterationStartCount = 0;
 	for (int iteration = 0; iteration < max_iter; iteration ++) {
 		if ((lossy) && ((triangle_count-deleted_triangles)<=target_count)) {
 			if (!finishLossless) break;
