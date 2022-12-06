@@ -62,7 +62,7 @@ static void symMatAdd(TSymetricMatrix ret, TSymetricMatrix n, TSymetricMatrix m)
 	n[5]+m[5], n[6]+m[6], n[7]+m[7], n[8]+m[8], n[9]+m[9]);
 } // symMatAdd()
 
-double symMatDet(TSymetricMatrix m, int a11, int a12, int a13, int a21, int a22, int a23, int a31, int a32, int a33) {
+static double symMatDet(TSymetricMatrix m, int a11, int a12, int a13, int a21, int a22, int a23, int a31, int a32, int a33) {
 	return m[a11]*m[a22]*m[a33] + m[a13]*m[a21]*m[a32] + m[a12]*m[a23]*m[a31]
 	- m[a13]*m[a22]*m[a31] - m[a11]*m[a23]*m[a32]- m[a12]*m[a21]*m[a33];
 } // symMatDet()
@@ -71,7 +71,7 @@ static vec3d ptf(double x, double y, double z) {
 	return (vec3d){.x = x, .y = y, .z = z};
 }// ptf()
 
-vec3d vCross(vec3d v1, vec3d v2) { //cross-product
+static vec3d vCross(vec3d v1, vec3d v2) { //cross-product
 	return ptf(v1.y * v2.z - v1.z * v2.y, v1.z * v2.x - v1.x * v2.z,
 		v1.x * v2.y - v1.y * v2.x);
 }
