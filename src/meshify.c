@@ -261,7 +261,7 @@ static void dilate(float * img, size_t dim[3], bool is26) {
 	free(k);
 }
 
-double clockMsec() { //return milliseconds since midnight
+double clockMsec(void) { //return milliseconds since midnight
 #ifdef _MSC_VER
 	clock_t t = clock();
 	return (double)((double)t) / (CLOCKS_PER_SEC / 1000.0);
@@ -706,7 +706,7 @@ static int save_off(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 	return EXIT_SUCCESS;
 }
 
-int save_obj(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_obj(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	FILE *fp = fopen(fnm,"w");
 	if (fp == NULL)
 		return EXIT_FAILURE;

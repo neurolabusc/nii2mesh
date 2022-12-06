@@ -10,6 +10,7 @@
  #include <unistd.h>
 #endif
 #include <stdint.h>
+#include "bwlabel.h"
 
 #define printfx(...) fprintf(stderr, __VA_ARGS__)
 
