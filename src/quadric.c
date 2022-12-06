@@ -22,7 +22,6 @@
 #else
  #include <unistd.h>
 #endif
-#include <time.h>
 #include "meshtypes.h"
 #include "quadric.h"
 #include <float.h> //FLT_EPSILON, DBL_EPSILON
@@ -39,26 +38,26 @@ struct TTriangle{
 	vec3d n;
 };
 
-void symMat1(TSymetricMatrix ret, double c){
+static void symMat1(TSymetricMatrix ret, double c){
 	for (int i = 0; i < 10; i++)
 		ret[i] = c;
 } // symMat()
 
-void symMat4(TSymetricMatrix ret, double a,double b,double c,double d){
+static void symMat4(TSymetricMatrix ret, double a,double b,double c,double d){
 	ret[0] = a*a; ret[1] = a*b; ret[2] = a*c; ret[3] = a*d;
 	ret[4] = b*b; ret[5] = b*c; ret[6] = b*d;
 	ret[7] = c*c; ret[8] = c*d;
 	ret[9] = d*d;
 }// symMat2()
 
-void symMat10(TSymetricMatrix ret, double m11, double m12, double m13, double m14, double m22, double m23, double m24, double m33, double m34, double m44){
+static void symMat10(TSymetricMatrix ret, double m11, double m12, double m13, double m14, double m22, double m23, double m24, double m33, double m34, double m44){
 	ret[0] = m11; ret[1] = m12; ret[2] = m13; ret[3] = m14;
 	ret[4] = m22; ret[5] = m23; ret[6] = m24;
 	ret[7] = m33; ret[8] = m34;
 	ret[9] = m44;
 } // symMat3()
 
-void symMatAdd(TSymetricMatrix ret, TSymetricMatrix n, TSymetricMatrix m) {
+static void symMatAdd(TSymetricMatrix ret, TSymetricMatrix n, TSymetricMatrix m) {
 	symMat10(ret, n[0]+m[0], n[1]+m[1], n[2]+m[2], n[3]+m[3], n[4]+m[4],
 	n[5]+m[5], n[6]+m[6], n[7]+m[7], n[8]+m[8], n[9]+m[9]);
 } // symMatAdd()
@@ -68,7 +67,7 @@ double symMatDet(TSymetricMatrix m, int a11, int a12, int a13, int a21, int a22,
 	- m[a13]*m[a22]*m[a31] - m[a11]*m[a23]*m[a32]- m[a12]*m[a21]*m[a33];
 } // symMatDet()
 
-vec3d ptf(double x, double y, double z) {
+static vec3d ptf(double x, double y, double z) {
 	return (vec3d){.x = x, .y = y, .z = z};
 }// ptf()
 
@@ -77,15 +76,15 @@ vec3d vCross(vec3d v1, vec3d v2) { //cross-product
 		v1.x * v2.y - v1.y * v2.x);
 }
 
-vec3d vSum(vec3d a, vec3d b){ //add two vectors
+static vec3d vSum(vec3d a, vec3d b){ //add two vectors
 	return ptf(a.x+b.x, a.y+b.y, a.z+b.z);
 }
 
-vec3d vSubtract(vec3d a, vec3d b){
+static vec3d vSubtract(vec3d a, vec3d b){
 	return ptf(a.x-b.x, a.y-b.y, a.z-b.z);
 }
 
-void vNormalize(vec3d *v){ //make vector unit length
+static void vNormalize(vec3d *v){ //make vector unit length
 	double len = sqrt( (v->x*v->x) + (v->y*v->y) + (v->z*v->z));
 	if (len <= 0) len = 0.001;
 	v->x = v->x / len;
@@ -93,20 +92,20 @@ void vNormalize(vec3d *v){ //make vector unit length
 	v->z = v->z / len;
 }
 
-double vDot (vec3d a,vec3d b){ //dot product
+static double vDot (vec3d a,vec3d b){ //dot product
 	return a.x*b.x + a.y*b.y + a.z*b.z;
 } // vDot()
 
-vec3d vMult(vec3d a, double v){ //multiply
+static vec3d vMult(vec3d a, double v){ //multiply
 	return ptf(a.x*v, a.y*v, a.z*v);
 } // vMult()
 
-double vertex_error(TSymetricMatrix q, double x, double y, double z){
+static double vertex_error(TSymetricMatrix q, double x, double y, double z){
 	return q[0]*x*x + 2*q[1]*x*y + 2*q[2]*x*z + 2*q[3]*x + q[4]*y*y
 	+ 2*q[5]*y*z + 2*q[6]*y + q[7]*z*z + 2*q[8]*z + q[9];
 } // vertex_error()
 
-double calculate_error(int id_v1, int id_v2, vec3d *p_result, struct TVertex vertices[]) {
+static double calculate_error(int id_v1, int id_v2, vec3d *p_result, struct TVertex vertices[]) {
 	TSymetricMatrix q;
 	symMatAdd(q, vertices[id_v1].q, vertices[id_v2].q);
 	int border = vertices[id_v1].border + vertices[id_v2].border;
@@ -142,7 +141,7 @@ double calculate_error(int id_v1, int id_v2, vec3d *p_result, struct TVertex ver
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
-void update_mesh(int iteration, struct TTriangle triangles[], struct TVertex vertices[], struct TRef refs[], int *nrefs, int* nTri, int* nVert) {
+static void update_mesh(int iteration, struct TTriangle triangles[], struct TVertex vertices[], struct TRef refs[], int *nrefs, int* nTri, int* nVert) {
 	if (iteration>0) { // compact triangles
 		int dst = 0;
 		for (int i = 0; i < *nTri; i++) {
@@ -248,7 +247,7 @@ void update_mesh(int iteration, struct TTriangle triangles[], struct TVertex ver
 	}
 }
 
-void compact_mesh(struct TTriangle triangles[], struct TVertex vertices[], int* nTri, int* nVert){
+static void compact_mesh(struct TTriangle triangles[], struct TVertex vertices[], int* nTri, int* nVert){
 		int dst=0;
 		loopi(0,*nVert)
 			vertices[i].tcount=0;
@@ -275,7 +274,7 @@ void compact_mesh(struct TTriangle triangles[], struct TVertex vertices[], int* 
 		* nVert = dst;
 }
 
-void update_triangles(int i0, struct TVertex* v, bool *deleted, int* deleted_triangles, struct TTriangle triangles[], struct TRef refs[], struct TVertex vertices[], int * nrefs){
+static void update_triangles(int i0, struct TVertex* v, bool *deleted, int* deleted_triangles, struct TTriangle triangles[], struct TRef refs[], struct TVertex vertices[], int * nrefs){
 	vec3d p;
 	loopk(0,v->tcount) {
 		struct TRef r=refs[v->tstart+k];
@@ -297,7 +296,7 @@ void update_triangles(int i0, struct TVertex* v, bool *deleted, int* deleted_tri
 	}
 }
 
-bool flipped(vec3d p,int i0,int i1,struct TVertex v0, struct TVertex v1,bool *deleted, struct TTriangle triangles[], struct TRef refs[], struct TVertex vertices[]) {
+static bool flipped(vec3d p,int i0,int i1,struct TVertex v0, struct TVertex v1,bool *deleted, struct TTriangle triangles[], struct TRef refs[], struct TVertex vertices[]) {
 	loopk(0,v0.tcount) {
 		struct TTriangle *t=&triangles[refs[v0.tstart+k].tid];
 		if(t->deleted)continue;
@@ -321,7 +320,7 @@ bool flipped(vec3d p,int i0,int i1,struct TVertex v0, struct TVertex v1,bool *de
 	return false;
 }
 
-void laplacian_smooth(vec3d *verts, vec3i *tris, int nvert, int ntri) {
+static void laplacian_smooth(vec3d *verts, vec3i *tris, int nvert, int ntri) {
 	vec3d* sum = (vec3d*) malloc(nvert * sizeof(vec3d));
 	memset(sum, 0, nvert * sizeof(vec3d));
 	int* num = (int*) malloc(nvert * sizeof(int));

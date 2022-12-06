@@ -50,7 +50,7 @@
 #define MIN(A,B) ((A) > (B) ? (B) : (A))
 #endif
 
-void fill_tratab(uint32_t  *tt, uint32_t  *nabo, uint32_t  nr_set)  {
+static void fill_tratab(uint32_t  *tt, uint32_t  *nabo, uint32_t  nr_set)  {
 /*
 *tt   Translation table
 *nabo   Set of neighbours
@@ -90,7 +90,7 @@ nr_set   Number of neighbours in nabo
 
 #define idx(A,B,C,DIM) ((C)*DIM[0]*DIM[1] + (B)*DIM[0] + (A))
 
-uint32_t check_previous_slice(uint32_t  *il,     /* Initial labelling map */
+static uint32_t check_previous_slice(uint32_t  *il,     /* Initial labelling map */
                                   uint32_t  r,       /* row */
                                   uint32_t  c,       /* column */
                                   uint32_t  sl,      /* slice */
@@ -131,7 +131,7 @@ uint32_t check_previous_slice(uint32_t  *il,     /* Initial labelling map */
    else {return(0);}
 }
 
-void * mxRealloc(void *oldArray, size_t oldBytes, size_t newBytes) {
+static void * mxRealloc(void *oldArray, size_t oldBytes, size_t newBytes) {
    // https://octave.org/doxygen/3.8/df/d4e/mex_8cc_source.html
    //reallocate memory, preserve previous bytes
    if (newBytes <= 0) {
@@ -152,7 +152,7 @@ void * mxRealloc(void *oldArray, size_t oldBytes, size_t newBytes) {
 
 /* do_initial_labelling */
 
-uint32_t do_initial_labelling(uint8_t        *bw,   /* Binary map */
+static uint32_t do_initial_labelling(uint8_t        *bw,   /* Binary map */
                                   size_t        *dim,  /* Dimensions of bw */
                                   uint32_t  conn,  /* Connectivity criterion */
                                   uint32_t  *il,   /* Initially labelled map */
@@ -242,7 +242,7 @@ uint32_t do_initial_labelling(uint8_t        *bw,   /* Binary map */
 
 /* translate_labels */
 
-int translate_labels(uint32_t  *il,     /* Map of initial labels. */
+static int translate_labels(uint32_t  *il,     /* Map of initial labels. */
                         size_t        dim[3],  /* Dimensions of il. */
                         uint32_t  *tt,     /* Translation table. */
                         uint32_t  ttn,     /* Size of translation table. */
@@ -272,7 +272,7 @@ int translate_labels(uint32_t  *il,     /* Map of initial labels. */
    return(cl);
 }
 
-void fillh(uint32_t* imgBin, size_t dim[3], int is26, int nLabels) {
+static void fillh(uint32_t* imgBin, size_t dim[3], int is26, int nLabels) {
   //aka nifti_fillh
   //all given binary image, interior 0 voxels set to 1
   int nx = dim[0];
@@ -410,4 +410,3 @@ int bwlabel(float *img, int conn, size_t dim[3], bool onlyLargest, bool fillBubb
   free(l);
   return nl;
 }
-

@@ -32,15 +32,15 @@
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
-double sqr(double x) {
+static double sqr(double x) {
 	return x * x;
 }
 
-double dx(vec3d p0, vec3d p1) {
+static double dx(vec3d p0, vec3d p1) {
 	return sqrt( sqr(p0.x - p1.x) + sqr(p0.y - p1.y) + sqr(p0.z - p1.z));
 }
 
-int unify_vertices(vec3d **inpt, vec3i *tris, int npt, int ntri, bool verbose) {
+static int unify_vertices(vec3d **inpt, vec3i *tris, int npt, int ntri, bool verbose) {
 	//"vertex welding": reduces the number of vertices, number of faces unchanged
 	double startTime = clockMsec();
 	vec3d *pts = *inpt;
@@ -108,7 +108,7 @@ int unify_vertices(vec3d **inpt, vec3i *tris, int npt, int ntri, bool verbose) {
 //#define DBL_EPSILON 2.2204460492503131e-16 // double
 #endif
 
-int remove_degenerate_triangles(vec3d *pts, vec3i **intris, int ntri, bool verbose) {
+static int remove_degenerate_triangles(vec3d *pts, vec3i **intris, int ntri, bool verbose) {
 	//reduces the number of triangles, number of vertices unchanged
 	double startTime = clockMsec();
 	vec3i *tris = *intris;
@@ -165,7 +165,7 @@ int remove_degenerate_triangles(vec3d *pts, vec3i **intris, int ntri, bool verbo
 	return newtri;
 }
 
-int quick_smooth(float * img, int nx, int ny, int nz) {
+static int quick_smooth(float * img, int nx, int ny, int nz) {
 	if ((nx < 5) || (ny < 5) || (nz < 5))
 		return EXIT_FAILURE;
 	int nvox = nx * ny * nz;
@@ -213,7 +213,7 @@ int quick_smooth(float * img, int nx, int ny, int nz) {
 	return EXIT_SUCCESS;
 }
 
-void dilate(float * img, size_t dim[3], bool is26) {
+static void dilate(float * img, size_t dim[3], bool is26) {
 	int nx = dim[0];
 	int ny = dim[1];
 	int nz = dim[2];
@@ -386,12 +386,12 @@ int meshify(float * img, size_t dim[3], int originalMC, float isolevel, vec3i **
 	return EXIT_SUCCESS;
 }
 
-bool littleEndianPlatform () {
+static bool littleEndianPlatform () {
 	uint32_t value = 1;
 	return (*((char *) &value) == 1);
 }
 
-void swap_4bytes( size_t n , void *ar ) { // 4 bytes at a time
+static void swap_4bytes( size_t n , void *ar ) { // 4 bytes at a time
 	size_t ii ;
 	unsigned char * cp0 = (unsigned char *)ar, * cp1, * cp2 ;
 	unsigned char tval ;
@@ -409,11 +409,11 @@ typedef struct {
 	float x,y,z;
 } vec3s; //single precision (float32)
 
-vec3s vec3d2vec4s(vec3d v) {
+static vec3s vec3d2vec4s(vec3d v) {
 	return (vec3s){.x = (float)v.x, .y = (float)v.y, .z = (float)v.z};
 } // convert float64 to float32
 
-int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt) {
+static int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt) {
 //FreeSurfer Triangle Surface Binary Format http://www.grahamwideman.com/gw/brain/fs/surfacefileformats.htm
 	uint8_t magic[3] = {0xFF, 0xFF, 0xFE};
 	FILE *fp = fopen(fnm,"wb");
@@ -458,7 +458,7 @@ int save_freesurfer(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 
 enum TZipMethod {zmZlib, zmGzip, zmBase64, zmLzip, zmLzma, zmLz4, zmLz4hc};
 
-int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize, unsigned char **outputbuf, const int zipid, int *ret, const int iscompress){
+static int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize, unsigned char **outputbuf, const int zipid, int *ret, const int iscompress){
 	z_stream zs;
 	size_t buflen[2]={0};
 	*outputbuf=NULL;
@@ -525,7 +525,7 @@ int zmat_run(const size_t inputsize, unsigned char *inputstr, size_t *outputsize
 	return 0;
 }
 
-int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	FILE *fp;
 	cJSON *root=NULL, *hdr=NULL, *node=NULL, *face=NULL;
 	char *jsonstr=NULL;
@@ -597,7 +597,7 @@ int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 #endif //HAVE_JSON
 #endif //HAVE_ZLIB
 
-int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	FILE *fp = fopen(fnm,"w");
 	if (fp == NULL)
 		return EXIT_FAILURE;
@@ -614,7 +614,7 @@ int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	return EXIT_SUCCESS;
 }
 
-int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz) {
+static int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz) {
 //https://github.com/neurolabusc/surf-ice/tree/master/mz3
 	#ifdef _MSC_VER
 #pragma pack(2)
@@ -693,7 +693,7 @@ int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	return EXIT_SUCCESS;
 }
 
-int save_off(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_off(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	FILE *fp = fopen(fnm,"w");
 	if (fp == NULL)
 		return EXIT_FAILURE;
@@ -718,7 +718,7 @@ int save_obj(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	return EXIT_SUCCESS;
 }
 
-int save_stl(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_stl(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	//binary STL http://paulbourke.net/dataformats/stl/
 	//n.b. like other tools, ignores formal restriction that all adjacent facets must share two common vertices.
 	//n.b. does not write normal
@@ -757,7 +757,7 @@ int save_stl(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	return EXIT_SUCCESS;
 }
 
-int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	#ifdef _MSC_VER
 #pragma pack(1)
 	typedef struct  {
@@ -812,7 +812,7 @@ int save_ply(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	return EXIT_SUCCESS;
 }
 
-int save_gii(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz){
+static int save_gii(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz){
 	//https://www.nitrc.org/projects/gifti/
 	//https://stackoverflow.com/questions/342409/how-do-i-base64-encode-decode-in-c
 	FILE *fp = fopen(fnm,"wb");
@@ -925,7 +925,7 @@ int save_gii(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool i
 	return EXIT_SUCCESS;
 }
 
-int save_vtk(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+static int save_vtk(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
 	typedef struct {
 		uint32_t n, x,y,z;
 	} vec4i;
@@ -1010,7 +1010,7 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	return save_obj(basenm, tris, pts, ntri, npt);
 }
 
-double sform(vec3d p, float srow[4]) {
+static double sform(vec3d p, float srow[4]) {
 	return (p.x * srow[0])+(p.y * srow[1])+(p.z * srow[2])+srow[3];
 }
 

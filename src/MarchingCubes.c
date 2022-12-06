@@ -58,7 +58,8 @@ void set_method    ( MCB *mcb, int originalMC ) {
 float get_data  (  MCB *mcb, int i,  int j,  int k )  { 
    return (mcb->data[ i + j*mcb->size_x + k*mcb->size_x*mcb->size_y]) ; 
 }
-void  set_data  (  MCB *mcb, float val,  int i,  int j,  int k ) {
+
+void set_data  (  MCB *mcb, float val,  int i,  int j,  int k ) {
   (mcb->data[ i + j*mcb->size_x + k*mcb->size_x*mcb->size_y] = val) ; 
 }
 int   get_x_vert(  MCB *mcb , int i,  int j,  int k )  { return (mcb->x_verts[ i + j*mcb->size_x + k*mcb->size_x*mcb->size_y] ); }

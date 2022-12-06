@@ -11,7 +11,7 @@ typedef struct {
 	double val[8];
 } GRIDCELL;
 
-vec3d setVec3d(double x, double y,double z) {
+static vec3d setVec3d(double x, double y,double z) {
 	return (vec3d){.x = x, .y = y, .z = z};
 }
 
@@ -19,7 +19,7 @@ vec3d setVec3d(double x, double y,double z) {
 	Return the point between two points in the same ratio as
 	isolevel is between valp1 and valp2
 */
-vec3d VertexInterp(double isolevel, vec3d p1,vec3d p2,double valp1,double valp2)
+static vec3d VertexInterp(double isolevel, vec3d p1,vec3d p2,double valp1,double valp2)
 {
 	double mu;
 	vec3d p;
@@ -47,7 +47,7 @@ vec3d VertexInterp(double isolevel, vec3d p1,vec3d p2,double valp1,double valp2)
 	0 will be returned if the grid cell is either totally above
 	of totally below the isolevel.
 */
-int PolygoniseCube(GRIDCELL g,double iso,vec3d *tri)
+static int PolygoniseCube(GRIDCELL g,double iso,vec3d *tri)
 {
 	int cubeindex;
 	vec3d vertlist[12];
