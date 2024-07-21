@@ -165,15 +165,8 @@ static void update_mesh(int iteration, struct TTriangle triangles[], struct TVer
 		tstart+=vertices[i].tcount;
 		vertices[i].tcount=0;
 	}
-	int maxRef = 0;
-	loopi(0,*nTri) {
-		struct TTriangle *t=&triangles[i];
-		loopj(0,3) {
-			struct TVertex* v=&vertices[t->v[j]];
-			maxRef = MAX(v->tstart+v->tcount, maxRef);
-		}
-	}
-	*nrefs = maxRef + 1; //0..maxRef, so maxRef+1 items
+	// Write References
+	*nrefs = *nTri * 3; //0..maxRef, so maxRef+1 items
 	loopi(0,*nTri) {
 		struct TTriangle *t=&triangles[i];
 		loopj(0,3) {

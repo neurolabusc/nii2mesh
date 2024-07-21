@@ -462,7 +462,7 @@ int triTable[256][16] =
 	return(nvert);
 }
 
-int marchingCubes(float * img, size_t dim[3], int lo[3], int hi[3], int originalMC, float isolevel, vec3d **vs, vec3i **ts, int *nv, int *nt) {
+int marchingCubes(float * img, short dim[3], int lo[3], int hi[3], int originalMC, float isolevel, vec3d **vs, vec3i **ts, int *nv, int *nt) {
 	int NX = dim[0];
 	int NY = dim[1];
 	int NZ = dim[2];

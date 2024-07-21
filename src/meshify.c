@@ -16,7 +16,9 @@
 	#endif
 #endif
 #include "meshify.h"
-#include "base64.h" //required for GIfTI
+#ifdef HAVE_FORMATS
+	#include "base64.h" //required for GIfTI
+#endif
 #include "bwlabel.h"
 #include "radixsort.h"
 #include "meshtypes.h"
@@ -281,7 +283,7 @@ long timediff(double startTimeMsec, double endTimeMsec) {
 	return round(endTimeMsec - startTimeMsec);
 }
 
-int meshify(float * img, size_t dim[3], int originalMC, float isolevel, vec3i **t, vec3d **p, int *nt, int *np, int preSmooth, bool onlyLargest, bool fillBubbles, bool verbose) {
+int meshify(float * img, short dim[3], int originalMC, float isolevel, vec3i **t, vec3d **p, int *nt, int *np, bool preSmooth, bool onlyLargest, bool fillBubbles, bool verbose) {
 // img: input volume
 // hdr: nifti header
 // isolevel: air/surface threshold
@@ -597,23 +599,6 @@ static int save_jmsh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt
 #endif //HAVE_JSON
 #endif //HAVE_ZLIB
 
-static int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
-	FILE *fp = fopen(fnm,"w");
-	if (fp == NULL)
-		return EXIT_FAILURE;
-	fprintf(fp,"{\n");
-	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh\"\n\t},\n");
-	fprintf(fp,"\t\"MeshVertex3\":[\n");
-	for (int i=0;i<npt;i++)
-		fprintf(fp, "[%g,\t%g,\t%g],\n", pts[i].x, pts[i].y,pts[i].z);
-	fprintf(fp,"\t],\n\t\"MeshTri3\":[\n");
-	for (int i=0;i<ntri;i++)
-		fprintf(fp, "[%d,\t%d,\t%d],\n", tris[i].x+1, tris[i].y+1, tris[i].z+1);
-	fprintf(fp,"\t]\n}\n");
-	fclose(fp);
-	return EXIT_SUCCESS;
-}
-
 static int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool isGz) {
 //https://github.com/neurolabusc/surf-ice/tree/master/mz3
 	#ifdef _MSC_VER
@@ -690,6 +675,25 @@ static int save_mz3(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt,
 		fclose(fp);
 	}
 	free(pts32);
+	return EXIT_SUCCESS;
+}
+
+#ifdef HAVE_FORMATS
+
+static int save_json(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt){
+	FILE *fp = fopen(fnm,"w");
+	if (fp == NULL)
+		return EXIT_FAILURE;
+	fprintf(fp,"{\n");
+	fprintf(fp,"\t\"_DataInfo_\":{\n\t\t\"JMeshVersion\":\"0.5\",\n\t\t\"Comment\":\"Created by nii2mesh\"\n\t},\n");
+	fprintf(fp,"\t\"MeshVertex3\":[\n");
+	for (int i=0;i<npt;i++)
+		fprintf(fp, "[%g,\t%g,\t%g],\n", pts[i].x, pts[i].y,pts[i].z);
+	fprintf(fp,"\t],\n\t\"MeshTri3\":[\n");
+	for (int i=0;i<ntri;i++)
+		fprintf(fp, "[%d,\t%d,\t%d],\n", tris[i].x+1, tris[i].y+1, tris[i].z+1);
+	fprintf(fp,"\t]\n}\n");
+	fclose(fp);
 	return EXIT_SUCCESS;
 }
 
@@ -964,6 +968,8 @@ static int save_vtk(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt)
 	return EXIT_SUCCESS;
 }
 
+#endif //HAVE_FORMATS
+
 void strip_ext(char *fname){
 	char *end = fname + strlen(fname);
 	while (end > fname && *end != '.' && *end != '\\' && *end != '/') {
@@ -981,20 +987,15 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 	strip_ext(basenm); // ~/file.nii -> ~/file
 	if (strlen(fnm) > strlen(basenm))
 		strcpy(ext, fnm + strlen(basenm));
-	if (strstr(ext, ".gii"))
+	if (strstr(ext, ".mz3"))
+		return save_mz3(fnm, tris, pts, ntri, npt, isGz);
+#ifdef HAVE_FORMATS
+	else if (strstr(ext, ".gii"))
 		return save_gii(fnm, tris, pts, ntri, npt, isGz);
 	else if ((strstr(ext, ".inflated")) || (strstr(ext, ".pial")))
 		return save_freesurfer(fnm, tris, pts, ntri, npt);
-#ifdef HAVE_ZLIB
-#ifdef HAVE_JSON
-	else if (strstr(ext, ".jmsh"))
-		return save_jmsh(fnm, tris, pts, ntri, npt);
-#endif //HAVE_JSON
-#endif //HAVE_ZLIB
 	else if (strstr(ext, ".json"))
 		return save_json(fnm, tris, pts, ntri, npt);
-	else if (strstr(ext, ".mz3"))
-		return save_mz3(fnm, tris, pts, ntri, npt, isGz);
 	else if (strstr(ext, ".off"))
 		return save_off(fnm, tris, pts, ntri, npt);
 	else if (strstr(ext, ".obj"))
@@ -1005,9 +1006,16 @@ int save_mesh(const char *fnm, vec3i *tris, vec3d *pts, int ntri, int npt, bool 
 		return save_stl(fnm, tris, pts, ntri, npt);
 	else if (strstr(ext, ".vtk"))
 		return save_vtk(fnm, tris, pts, ntri, npt);
+#endif //HAVE_FORMATS
+#ifdef HAVE_ZLIB
+#ifdef HAVE_JSON
+	else if (strstr(ext, ".jmsh"))
+		return save_jmsh(fnm, tris, pts, ntri, npt);
+#endif //HAVE_JSON
+#endif //HAVE_ZLIB
 	strcpy(basenm, fnm);
-	strcat(basenm, ".obj");
-	return save_obj(basenm, tris, pts, ntri, npt);
+	strcat(basenm, ".mz3");
+	return save_mz3(basenm, tris, pts, ntri, npt, isGz);
 }
 
 static double sform(vec3d p, float srow[4]) {

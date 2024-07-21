@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include "bwlabel.h"
 
+
 #define printfx(...) fprintf(stderr, __VA_ARGS__)
 
 //Jesper Andersson has acknowledged that this port of spm_bwlabel.c may be released using the BSD 2-Clause license
@@ -92,19 +93,17 @@ nr_set   Number of neighbours in nabo
 #define idx(A,B,C,DIM) ((C)*DIM[0]*DIM[1] + (B)*DIM[0] + (A))
 
 static uint32_t check_previous_slice(uint32_t  *il,     /* Initial labelling map */
-                                  uint32_t  r,       /* row */
-                                  uint32_t  c,       /* column */
-                                  uint32_t  sl,      /* slice */
-                                  size_t        dim[3],  /* dimensions of il */
-                                  uint32_t  conn,    /* Connectivity criterion */
-                                  uint32_t  *tt)     /* Translation table */
-//                                  uint32_t  ttn)     /* Size of translation table */
+                                    uint32_t  r,       /* row */
+                                    uint32_t  c,       /* column */
+                                    uint32_t  sl,      /* slice */
+                                    size_t   dim[3],  /* dimensions of il */
+                                    uint32_t  conn,    /* Connectivity criterion */
+                                    uint32_t *nabo,
+                                    uint32_t  *tt)     /* Translation table */
 {
-   uint32_t l=0;
-   uint32_t nabo[9];
-   uint32_t nr_set = 0;
-
    if (!sl) return(0);
+   uint32_t l=0;
+   uint32_t nr_set = 0;
    if (conn >= 6)
    {
       if ((l = il[idx(r,c,sl-1,dim)])) {nabo[nr_set++] = l;}
@@ -159,13 +158,15 @@ static uint32_t do_initial_labelling(uint8_t        *bw,   /* Binary map */
                                   uint32_t  *il,   /* Initially labelled map */
                                   uint32_t  **tt)  /* Translation table */
 {
+   const size_t kGrowSize = 10000;
    uint32_t  i = 0, j = 0;
    uint32_t  nabo[8];
    uint32_t  label = 1;
    uint32_t  nr_set = 0;
    uint32_t  l = 0;
    int32_t       sl, r, c;
-   uint32_t  ttn = 1000;
+   uint32_t  ttn = kGrowSize;
+   uint32_t nabo9[9];
    *tt = (uint32_t *)malloc(ttn * sizeof(uint32_t));
    memset(*tt, 0, ttn * sizeof(uint32_t));
    for (sl=0; sl<dim[2]; sl++)
@@ -177,7 +178,7 @@ static uint32_t do_initial_labelling(uint8_t        *bw,   /* Binary map */
             nr_set = 0;
             if (bw[idx(r,c,sl,dim)])
             {
-               nabo[0] = check_previous_slice(il,r,c,sl,dim,conn,*tt /*,ttn*/);
+               nabo[0] = check_previous_slice(il,r,c,sl,dim,conn,nabo9, *tt /*,ttn*/);
                if (nabo[0]) {nr_set += 1;}
                /*
                   For six(surface)-connectivity
@@ -216,7 +217,10 @@ static uint32_t do_initial_labelling(uint8_t        *bw,   /* Binary map */
                else
                {
                   il[idx(r,c,sl,dim)] = label;
-                  if (label >= ttn) {ttn += 1000; *tt = (uint32_t*)mxRealloc(*tt, (ttn - 1000)*sizeof(uint32_t), ttn*sizeof(uint32_t));}
+                  if (label >= ttn) {
+                    ttn += kGrowSize;
+                    *tt = (uint32_t*)mxRealloc(*tt, (ttn - kGrowSize)*sizeof(uint32_t), ttn*sizeof(uint32_t));
+                  }
                   (*tt)[label-1] = label;
                   label++;
                }
@@ -356,8 +360,6 @@ static void fillh(uint32_t* imgBin, size_t dim[3], int is26, int nLabels) {
         imgBin[i] = label; //hidden internal voxel not found from the fill
     }
   }
-  //for (size_t i = 0; i < nvox; i++)
-  //  imgBin[i] = (vxs[i] == 0); //hidden internal voxel not found from the fill
   free(vxs);
   free(q);
   free(k);
@@ -388,15 +390,17 @@ int bwlabel(float *img, int conn, size_t dim[3], bool onlyLargest, bool fillBubb
   free(il);
   free(tt);
   if ((nl > 0) && (onlyLargest)){
+    uint32_t *nls = (uint32_t *)malloc((nl+1) * sizeof(uint32_t));
+    for (int j = 0; j <= nl; j++)
+        nls[j] = 0;
+    for (int i = 0; i < nvox; i++) {
+        nls[l[i]]++;
+    }
     int mxL = 0;
     int mxN = 0;
     for (int j = 1; j <= nl; j++) {
-      int n = 0;
-      for (int i = 0; i < nvox; i++)
-        if (l[i] == j)
-          n++;
-      if (n > mxN) {
-        mxN = n;
+      if (nls[j] > mxN) {
+        mxN = nls[j];
         mxL = j;
       }
     } //for j: each label
@@ -405,7 +409,7 @@ int bwlabel(float *img, int conn, size_t dim[3], bool onlyLargest, bool fillBubb
     nl = 1;
   } //if labels found
   if (fillBubbles)
-      fillh(l, dim, 1, nl);
+      fillh(l, dim, 0, nl);
   for (size_t i = 0; i < nvox; i++)
     img[i] = l[i];
   free(l);

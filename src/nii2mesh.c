@@ -174,11 +174,155 @@ float * load_nii(const char *fnm, nifti_1_header * hdr) {
 	return img32;
 }
 
-int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float reduceFraction, int preSmooth, bool onlyLargest, bool fillBubbles, int postSmooth, bool verbose, char * outnm, int quality) {
+bool isMz3(const char *fnm) {
+	char basenm[768], ext[768] = "";
+	strcpy(basenm, fnm);
+	strip_ext(basenm); // ~/file.nii -> ~/file
+	if (strlen(fnm) > strlen(basenm))
+		strcpy(ext, fnm + strlen(basenm));
+	return strstr(ext, ".mz3");
+}
+
+void read_mz3(const char* filename, vec3d **verts, vec3i **tris, int* nvert, int* ntri) {
+	#ifdef _MSC_VER
+		#pragma pack(2)
+			struct mz3hdr {
+				uint16_t SIGNATURE, ATTR;
+				uint32_t NFACE, NVERT, NSKIP;
+			};
+		#pragma pack()
+	#else
+		struct __attribute__((__packed__)) mz3hdr {
+			uint16_t SIGNATURE, ATTR;
+			uint32_t NFACE, NVERT, NSKIP;
+		};
+	#endif
+	if( access( filename, F_OK ) != 0 ) {
+		printf("Unable to find a mz3 named %s\n", filename);
+		exit(EXIT_FAILURE);
+	}
+	FILE *fp = fopen(filename,"rb");
+	struct mz3hdr h;
+	size_t bytes_read = fread(&h, sizeof(struct mz3hdr), 1, fp);
+	if (bytes_read <= 0) {
+		printf("Unable to read %s\n", filename);
+		exit(EXIT_FAILURE);
+	}
+	uint16_t sig = 23117;
+	#ifdef HAVE_ZLIB
+	if (sig != h.SIGNATURE) {
+		fclose(fp);
+		gzFile fgz = gzopen(filename, "r");
+		if (! fgz) {
+			printf("gzopen error %s\n", filename);
+			exit(EXIT_FAILURE);
+		}
+		int bytes_read = gzread(fgz, &h, sizeof(struct mz3hdr));
+		if (sig != h.SIGNATURE) {
+			gzclose(fgz);
+			printf("Unable to read compressed mz3 %s\n", filename);
+			exit(EXIT_FAILURE);
+		}
+		*ntri = (int) h.NFACE;
+		*nvert = (int) h.NVERT;
+		uint32_t skip = h.NSKIP;
+		// fseek(fp, (int)(sizeof(struct mz3hdr) + skip), SEEK_SET);
+		uint32_t tribytes = h.NFACE * sizeof(vec3i);
+		*tris = (vec3i *) malloc(tribytes);
+		void * imgRaw = (void *) *tris;
+		bytes_read = gzread(fgz, imgRaw, tribytes);
+		if (bytes_read <= 0) {
+			printf("Unable to read compressed triangles %s\n", filename);
+			exit(EXIT_FAILURE);
+		}
+		uint32_t vertbytes32 = h.NVERT * 3 * sizeof(float);
+		float * verts32 = (float *) malloc(vertbytes32);
+		bytes_read = gzread(fgz, verts32, vertbytes32);
+		if (bytes_read <= 0) {
+			printf("Unable to read vertices %s\n", filename);
+			exit(EXIT_FAILURE);
+		}
+		*verts = (vec3d *) malloc(h.NVERT * sizeof(vec3d));
+		vec3d *vs = *verts;
+		int j = 0;
+		for (int i = 0; i < h.NVERT; i++) {
+			vec3d v;
+			v.x = verts32[j++];
+			v.y = verts32[j++];
+			v.z = verts32[j++];
+			vs[i] = v;
+		}
+		free(verts32);
+		gzclose(fgz);
+		return;
+	}
+	#endif
+	if (sig != h.SIGNATURE) {
+		fclose(fp);
+		printf("Unable to read mz3 (unable to read gz compressed) %s\n", filename);
+		exit(EXIT_FAILURE);
+	}
+	*ntri = (int) h.NFACE;
+	*nvert = (int) h.NVERT;
+	uint32_t skip = h.NSKIP;
+	fseek(fp, (int)(sizeof(struct mz3hdr) + skip), SEEK_SET);
+	uint32_t tribytes = h.NFACE * sizeof(vec3i);
+	*tris = (vec3i *) malloc(tribytes);
+	void * imgRaw = (void *) *tris;
+	bytes_read = fread(imgRaw, tribytes, 1, fp);
+	if (bytes_read <= 0) {
+		printf("Unable to read triangles %s\n", filename);
+		exit(EXIT_FAILURE);
+	}
+	uint32_t vertbytes32 = h.NVERT * 3 * sizeof(float);
+	float * verts32 = (float *) malloc(vertbytes32);
+	bytes_read = fread(verts32, vertbytes32, 1, fp);
+	if (bytes_read <= 0) {
+		printf("Unable to read vertices %s\n", filename);
+		exit(EXIT_FAILURE);
+	}
+	*verts = (vec3d *) malloc(h.NVERT * sizeof(vec3d));
+	vec3d *vs = *verts;
+	int j = 0;
+	for (int i = 0; i < h.NVERT; i++) {
+		vec3d v;
+		v.x = verts32[j++];
+		v.y = verts32[j++];
+		v.z = verts32[j++];
+		vs[i] = v;
+	}
+	free(verts32);
+	fclose(fp);
+}
+
+int simplify_mz3(const char * innm, const char * outnm, float reduceFraction, bool verbose, int quality) {
 	vec3d *pts = NULL;
 	vec3i *tris = NULL;
 	int ntri, npt;
-	size_t dim[3] = {hdr.dim[1], hdr.dim[2], hdr.dim[3]};
+	read_mz3(innm, &pts, &tris, &npt, &ntri);
+	double agressiveness = 7.0; //7 = default for Simplify.h
+	if (quality == 0) //fast
+		agressiveness = 8.0;
+	if (quality == 2) //best
+		agressiveness = 5.0;
+	int startVert = npt;
+	int startTri = ntri;
+	int target_count = round((float)ntri * reduceFraction);
+	double startTime = clockMsec();
+	quadric_simplify_mesh(&pts, &tris, &npt, &ntri, target_count, agressiveness, verbose, (quality > 1));
+	if (verbose)
+		printf("simplify vertices %d->%d triangles %d->%d (r = %g): %ld ms\n", startVert, npt, startTri, ntri, (float)ntri / (float) startTri, timediff(startTime, clockMsec()));
+	save_mesh(outnm, tris, pts, ntri, npt, (quality > 0));
+	free(tris);
+	free(pts);
+	return EXIT_SUCCESS;
+}
+
+int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float reduceFraction, bool preSmooth, bool onlyLargest, bool fillBubbles, int postSmooth, bool verbose, const char * outnm, int quality) {
+	vec3d *pts = NULL;
+	vec3i *tris = NULL;
+	int ntri, npt;
+	short dim[3] = {hdr.dim[1], hdr.dim[2], hdr.dim[3]};
 	if (meshify(img, dim, originalMC, isolevel, &tris, &pts, &ntri, &npt, preSmooth, onlyLargest, fillBubbles, verbose) != EXIT_SUCCESS)
 		return EXIT_FAILURE;
 	apply_sform(tris, pts, ntri, npt, hdr.srow_x, hdr.srow_y, hdr.srow_z);
@@ -211,12 +355,45 @@ int nii2 (nifti_1_header hdr, float * img, int originalMC, float isolevel, float
 	return EXIT_SUCCESS;
 }
 
+#ifdef __EMSCRIPTEN__
+
+//["string", "number", "string", "number","boolean","boolean","number","boolean"], // param
+//[filename, percentage, simplify_name, isoValue, onlyLargest, fillBubbles,postSmooth, verbose]
+extern "C" {
+	int simplify(const char* file_path, float reduceFraction, const char* export_path, float isolevel, bool onlyLargest, bool fillBubbles, float postSmoothF, bool verbose) {
+		bool preSmooth = true;
+		int postSmooth = round(postSmoothF);
+		int quality = 1;
+		int originalMC = 0;
+		if (isMz3(file_path)) {
+			return simplify_mz3(file_path, export_path, reduceFraction, verbose, quality);
+		}
+		nifti_1_header hdr;
+		float * img = load_nii(file_path, &hdr);
+		if (img == NULL)
+			exit(EXIT_FAILURE);
+		int nvox = (hdr.dim[1] * hdr.dim[2] * hdr.dim[3]);
+		if (isnan(isolevel)) { //no a number
+			isolevel = setThreshold(img, nvox, 2);
+		} else if (isinf(isolevel) && isolevel < 0) {//negative inifinity
+			isolevel = setThreshold(img, nvox, 1);
+		} else if (isinf(isolevel) && isolevel > 0) {// positive infinity
+			isolevel = setThreshold(img, nvox, 3);
+		}
+		if (verbose)
+			printf("frac %g isoval %g onlyLargest %d fillBubbles %d smooth %d\n", reduceFraction, isolevel, onlyLargest, fillBubbles, postSmooth);
+		return nii2(hdr, img, originalMC, isolevel, reduceFraction, preSmooth, onlyLargest, fillBubbles, postSmooth, verbose, export_path, quality);
+	}
+}
+
+#else
+
 int main(int argc,char **argv) {
 	#define mxStr 1024
 	float isolevel = 0.0;
 	int isoDarkMediumBright123 = 2;
 	float reduceFraction = 0.25;
-	int preSmooth = true;
+	bool preSmooth = true;
 	bool onlyLargest = true;
 	bool fillBubbles = false;
 	int postSmooth = 0;
@@ -242,17 +419,22 @@ int main(int argc,char **argv) {
 		printf("    -q v    quality (0=fast, 1= balanced, 2=best, default %d)\n", quality);
 		printf("    -s v    post-smoothing iterations (default %d)\n", postSmooth);
 		printf("    -v v    verbose (0=silent, 1=verbose, default %d)\n", verbose);
-		#ifdef HAVE_JSON
-		printf("mesh extension sets format (.gii, .jmsh, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+		#ifdef HAVE_FORMATS
+			#ifdef HAVE_JSON
+			printf("mesh extension sets format (.gii, .jmsh, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+			#else
+			printf("mesh extension sets format (.gii, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+			#endif
+			printf("Example: '%s voxels.nii mesh.obj'\n",argv[0]);
+			printf("Example: '%s bet.nii.gz -i 22 myOutput.obj'\n",argv[0]);
+			printf("Example: '%s bet.nii.gz -v 1 -i b bright.obj'\n",argv[0]);
+			printf("Example: '%s img.nii -p 0 -r 1 large.ply'\n",argv[0]);
+			printf("Example: '%s img.nii -r 0.1 small.gii'\n",argv[0]);
 		#else
-		printf("mesh extension sets format (.gii, .json, .mz3, .obj, .ply, .pial, .stl, .vtk)\n");
+			printf("mesh extension must be .mz3 (minimal compile)\n");
 		#endif
-		printf("Example: '%s voxels.nii mesh.obj'\n",argv[0]);
-		printf("Example: '%s bet.nii.gz -i 22 myOutput.obj'\n",argv[0]);
-		printf("Example: '%s bet.nii.gz -i b bright.obj'\n",argv[0]);
-		printf("Example: '%s img.nii -v 1 out.ply'\n",argv[0]);
-		printf("Example: '%s img.nii -p 0 -r 1 large.ply'\n",argv[0]);
-		printf("Example: '%s img.nii -r 0.1 small.gii'\n",argv[0]);
+		printf("Example: '%s bet.nii -r 0.2 mesh.mz3'\n",argv[0]);
+		printf("Example: '%s mesh.mz3 -r 0.1 small.mz3'\n",argv[0]);
 		exit(-1);
 	}
 	// Parse options (if any)
@@ -279,8 +461,9 @@ int main(int argc,char **argv) {
 				onlyLargest = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-o") == 0)
 				originalMC = atoi(argv[i+1]);
-			if (strcmp(argv[i],"-p") == 0)
-				preSmooth = atoi(argv[i+1]);
+			if (strcmp(argv[i],"-p") == 0) {
+				preSmooth = (atoi(argv[i+1]) > 0);
+			}
 			if (strcmp(argv[i],"-q") == 0)
 				quality = atoi(argv[i+1]);
 			if (strcmp(argv[i],"-s") == 0)
@@ -290,6 +473,9 @@ int main(int argc,char **argv) {
 			if (strcmp(argv[i],"-v") == 0)
 				verbose = atoi(argv[i+1]);
 		}
+	}
+	if (isMz3(argv[1])) {
+		return simplify_mz3(argv[1], argv[argc-1], reduceFraction, verbose, quality);
 	}
 	nifti_1_header hdr;
 	double startTime = clockMsec();
@@ -400,3 +586,4 @@ int main(int argc,char **argv) {
 	free(img);
 	exit(ret);
 }
+#endif

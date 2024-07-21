@@ -16,29 +16,14 @@ cd nii2mesh/src
 make
 ```
 
-You can also compile the program using Windows, but you may find it easier to download the pre-compiled executable found by selecting the [`Releases`](https://github.com/neurolabusc/nii2mesh/releases/latest/).
+You can also compile as WebAssembly [see this live demo](https://github.com/niivue/niivue-mesh).
 
-You can also specify compile time options to modify the software. Here are some possible optional compiles (though note you can also combine various options simultaneously):
 
-```
-make CXX=clang
-OMP=1 make
-JSON=1 make -j
-OLD=1 make
-```
-
-If you have both [gcc](https://gcc.gnu.org) and [Clang LLVM](https://clang.llvm.org) compilers installed, you can use `CXX=clang` to explicitly select the Clang compiler. The environment variable `OMP=1` will compile with [OpenMP](https://www.openmp.org) which will use multiple threads to accelerate creation of atlas-based meshes. You can specify `JSON=1` to support saving meshes in [jmesh](https://github.com/OpenJData/jmesh) format. The `OLD=1` will use Cory Bloyd's classic Marching Cubes algorithm instead of Thomas Lewiner's optimized tables (the classic method is faster, but may not handle ambiguous edges as gracefully).
-
-For Windows, it is recommended that you can compile this project by installing the optional [Clang/LLVM ](https://docs.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170) available with Visual Studio 2019 version 16.2 and later. The code can be compiled using Clang/LLVM with the command:
 
 ```
-gcc -DNII2MESH -DHAVE_ZLIB nii2mesh.c MarchingCubes.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c -o nii2mesh -lz -lm
-```
-
-The project has been tested with [C99](https://en.wikipedia.org/wiki/C99) compilers. The Microsoft C compiler (MSVC) only [conforms](https://docs.microsoft.com/en-us/cpp/c-language/ansi-conformance?view=msvc-170) to [C90](https://en.wikipedia.org/wiki/ANSI_C). In theory, one can compile the project (without zlib support) with the command:
-
-```
-cl -DNII2MESH nii2mesh.c MarchingCubes.c isolevel.c meshify.c quadric.c base64.c bwlabel.c radixsort.c
+git clone https://github.com/neurolabusc/nii2mesh
+cd nii2mesh/src
+make wasm
 ```
 
 ## Usage

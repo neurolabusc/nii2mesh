@@ -16,7 +16,7 @@
 
 #ifdef NII2MESH
  #include "meshtypes.h"
- int marchingCubes(float * img, size_t dim[3], int lo[3], int hi[3], int originalMC, float isolevel, vec3d **vs, vec3i **ts, int *nv, int *nt);
+ int marchingCubes(float * img, short dim[3], int lo[3], int hi[3], int originalMC, float isolevel, vec3d **vs, vec3i **ts, int *nv, int *nt);
 #endif
 //_____________________________________________________________________________
 // types
