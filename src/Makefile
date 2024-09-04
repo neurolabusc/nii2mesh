@@ -36,7 +36,8 @@ OFILES= -o nii2mesh
 WASM := -s DEMANGLE_SUPPORT=1 -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "FS_createDataFile", "FS_readFile", "FS_unlink"]' -s ALLOW_MEMORY_GROWTH=1 -s WASM=1 -s EXPORTED_FUNCTIONS='["_simplify"]'
 
 # Modern marching cubes (vs classic)
-MFILES= MarchingCubes.c
+# MFILES= MarchingCubes.c
+MFILES= -DUSE_CLASSIC_CUBES oldcubes.c
 
 # GIfTI, obj, vtk, stl, etc support
 GFILES= -DHAVE_FORMATS base64.c

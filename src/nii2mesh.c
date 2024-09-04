@@ -48,7 +48,7 @@
 #else
     #define kCPUsuf " " //unknown CPU
 #endif
-#define kdate "v1.0.20211220"
+#define kdate "v1.0.20240904"
 
 float * load_nii(const char *fnm, nifti_1_header * hdr) {
 	char imgnm[768], hdrnm[768], basenm[768], ext[768] = "";
@@ -473,6 +473,9 @@ int main(int argc,char **argv) {
 			if (strcmp(argv[i],"-v") == 0)
 				verbose = atoi(argv[i+1]);
 		}
+	}
+	if (verbose) {
+		printf("nii2mesh %s %s %s\n", kdate, kCCsuf, kCPUsuf);
 	}
 	if (isMz3(argv[1])) {
 		return simplify_mz3(argv[1], argv[argc-1], reduceFraction, verbose, quality);
