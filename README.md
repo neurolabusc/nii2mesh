@@ -2,6 +2,8 @@
 
 This tool converts a NIfTI 3D voxel image to a triangulated mesh. It can save meshes in in the GIfTI (.gii), mz3, obj, ply, FreeSurfer (.pial), stl, vtk, formats. You can use [dcm2niix](https://github.com/rordenlab/dcm2niix) to convert DICOM images to NIfTI. The software is written in pure C (rather than C++).
 
+nii2mesh is a minimal tool. [niimath](https://github.com/rordenlab/niimath) includes all the features of nii2mesh along with many voxel-based image processing features. Users are recommended to use niimath, while nii2mesh is ideal for developers who want to use the core code in other projects.
+
 ## Live Demo
 
  - The [live demo web page](https://github.com/rordenlab/nii2meshWeb) allows you to use nii2mesh without installing any software on your computer.
