@@ -414,6 +414,7 @@ int bwlabel(float *img, int conn, size_t dim[3], bool onlyLargest, bool fillBubb
     for (int i = 0; i < nvox; i++)
       l[i] = (l[i] == mxL);
     nl = 1;
+    free(nls);
   } //if labels found
   if (fillBubbles)
       fillh(l, dim, 0, nl);
