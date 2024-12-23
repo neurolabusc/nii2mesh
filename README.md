@@ -188,11 +188,13 @@ For brain specific printing, you may want to look at these tutorials.
  - [Mohan Gupta](https://www.mohanwugupta.com/post/3d_brain_printing/) uses FreeSurfer and MeshLab.
  - [Ford Burles](https://fordburles.com/3d-print-brain-guide.html) uses FreeSurfer and MeshLab or Blender.
  
-## Limitations
+## Limitations and Alternatives
 
-Similar to most mesh tools, nii2mesh uses fast algorithms that can generate self intersecting triangles. If you are conducting analyses where this is undesirable (e.g boundary element method (BEM) and finite element method (FEM) computations) you should consider (slower) algorithms that prevent these [features](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0184206). If you are interested in these applications, you may want to consider [iso2mesh](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi).
+Similar to most mesh tools, nii2mesh uses fast algorithms that can generate self intersecting triangles. Particularly, the smoothing and simplification can create tiny tears that mean the mesh is not watertight. For some applications such as visualization and printing, these defects may not be an issue. However, If you are conducting analyses where this is undesirable (e.g boundary element method (BEM) and finite element method (FEM) computations) you should consider (slower) algorithms that prevent these [features](https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0184206). If you are interested in these applications, you may want to consider [iso2mesh](http://iso2mesh.sourceforge.net/cgi-bin/index.cgi).
 
-If you generate meshes that are only a single object (`-l 1`) that is watertight (e.g. bubble-filled, `-b 1`) you can fix self intersections with [MeshFix](https://github.com/MarcoAttene/MeshFix-V2.1):
+You can inspect the quality of your mesh with MeshLab. In particular, the `Compute Geometric Measures` menu item (in the `Quality Measures` sub-menu of the the `Filters` menu) will detect defects. If you generate meshes that are only a single object (`-l 1`) that is watertight (e.g. bubble-filled, `-b 1`) you can fix self intersections with [MeshFix](https://github.com/MarcoAttene/MeshFix-V2.1):
+
+Alternatively, you may want to look at the mesh tools of ITK that require more resource (time and memory), but create higher quality meshes. For example, the [brain2print](https://github.com/niivue/brain2print) and [ct2print](https://github.com/niivue/ct2print) projects use [ITK-Wasm](https://wasm.itk.org/en/latest/) web assembly to embed ITK mesh functions into web pages.
 
 ```
 nii2mesh bet.nii.gz -b 1 -l 1 bet.ply
