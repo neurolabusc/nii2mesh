@@ -201,6 +201,12 @@ nii2mesh bet.nii.gz -b 1 -l 1 bet.ply
 MeshFix bet.ply better.ply
 ```
 
+## Citation
+
+Since nii2mesh code is included in niimath, the appropriate citation is:
+
+  - Rorden C, Webster M, Drake C,  Jenkinson M, Clayden JD, Li N, Hanayik T ([2024](https://apertureneuro.org/article/94384-niimath-and-fslmaths-replication-as-a-method-to-enhance-popular-neuroimaging-tools)) niimath and fslmaths: replication as a method to enhance popular neuroimaging tools. Aperture Neuro.4. doi:10.52294/001c.94384
+
 ## Links
 
  - By default, this project uses an [enhanced Marching Cubes algorithm](http://thomas.lewiner.org/pdfs/marching_cubes_jgt.pdf) to convert voxels to a triangular mesh. Optionally, it can be compiled to use the (faster) classic marching cubes [method implemented by Cory Bloyd](http://paulbourke.net/geometry/polygonise/).
@@ -216,3 +222,4 @@ MeshFix bet.ply better.ply
   - [DicomToMesh](https://github.com/AOT-AG/DicomToMesh) is available for Debian-based Linux.
  - [Online tool for NIfTI to STL conversion](http://niftyweb.cs.ucl.ac.uk/program.php?p=PRINTING).
  - [Comparison of voxel to mesh conversion tools](https://threedmedprint.biomedcentral.com/articles/10.1186/s41205-020-00069-2).
+ - The Python [subcortex_visualization](https://github.com/anniegbryant/subcortex_visualization) creates nice visualizations, and provides scripts that call [nii2mesh](https://github.com/anniegbryant/subcortex_visualization/blob/afe47d52ef08fd6400b151a2aec638364e578d6c/custom_segmentation_pipeline/README.md) for creating new segmentations.
