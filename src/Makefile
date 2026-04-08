@@ -48,6 +48,9 @@ release:
 	$(info $(NOTES))
 	$(CNAME) -O3 $(CFLAGS) $(CFILES) $(GFILES) $(MFILES) $(LFLAGS) $(ZFLAGS) $(OFILES)
 
+lewiner:
+	$(CNAME) -O3 $(CFLAGS) $(CFILES) $(GFILES) MarchingCubes.c $(LFLAGS) $(ZFLAGS) $(OFILES)
+
 obj2:
 	$(CNAME) -O3 $(CFLAGS) $(CFILES) $(GFILES) $(MFILES) $(LFLAGS) $(ZFLAGS) -o obj2mesh
 

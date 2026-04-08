@@ -20,12 +20,18 @@ make
 
 You can also compile as WebAssembly [see this live demo](https://github.com/niivue/niivue-mesh).
 
-
-
 ```
 git clone https://github.com/neurolabusc/nii2mesh
 cd nii2mesh/src
 make wasm
+```
+
+You can also compile this tools with the [alternative Marching Cubes algorithm suggested by Lewinier and colleagues](http://thomas.lewiner.org/pdfs/marching_cubes_jgt.pdf):
+
+```
+git clone https://github.com/neurolabusc/nii2mesh
+cd nii2mesh/src
+make lewiner
 ```
 
 ## Usage
