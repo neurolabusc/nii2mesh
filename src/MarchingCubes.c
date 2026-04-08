@@ -1068,9 +1068,9 @@ int add_c_vertex( MCB *mcb)
 #ifdef NII2MESH
 int marchingCubes(float * img, short dim[3], int lo[3], int hi[3], int originalMC, float isolevel, vec3d **vs, vec3i **ts, int *nv, int *nt) {
   MCB * mcp = MarchingCubes(-1, -1, -1);
-  int NX = hi[0] - lo[0] + 1;
-  int NY = hi[1] - lo[1] + 1;
-  int NZ = hi[2] - lo[2] + 1;
+  int NX = dim[0];
+  int NY = dim[1];
+  int NZ = dim[2];
   set_resolution( mcp, NX, NY, NZ) ;
   init_all(mcp) ;
   float * im = mcp->data;
